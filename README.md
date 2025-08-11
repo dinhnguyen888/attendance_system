@@ -28,3 +28,6 @@ docker-compose up -d
 -   Đăng nhập với tài khoản mặc định:
     -   Username: admin
     -   Password: admin
+-   Vào Setting của odoo, ở tab General kéo xuống cuối cùng bật active developer mode
+-   Tiếp tục vào App, Tìm Và cài các app: Attendances, Employees , Attendance System Customized (module mình code). Tiến hành cài đặt
+-   code muốn refresh, gõ docker compose exec -T odoo odoo -c /etc/odoo/odoo.conf -d odoo_db -u attendance_system --stop-after-init | cat
