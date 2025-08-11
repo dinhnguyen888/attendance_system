@@ -26,5 +26,5 @@ docker-compose up -d
 
 -   Odoo sẽ chạy tại: http://localhost:8069
 -   Đăng nhập với tài khoản mặc định:
-    -   Username: odoo
-    -   Password: odoo
+    -   Username: admin
+    -   Password: admin
