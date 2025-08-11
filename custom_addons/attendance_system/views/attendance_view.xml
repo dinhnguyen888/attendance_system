@@ -1,0 +1,13 @@
+<!-- view template -->
+<odoo>
+    <record id="view_hr_attendance_form_inherit_face" model="ir.ui.view">
+        <field name="name">hr.attendance.form.inherit.face</field>
+        <field name="model">hr.attendance</field>
+        <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='employee_id']" position="after">
+                <field name="face_image"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
