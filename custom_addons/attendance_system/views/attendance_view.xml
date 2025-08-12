@@ -1,13 +1,28 @@
 <!-- view template -->
 <odoo>
+    <!-- Inherit form view để thêm trường face_image -->
     <record id="view_hr_attendance_form_inherit_face" model="ir.ui.view">
         <field name="name">hr.attendance.form.inherit.face</field>
         <field name="model">hr.attendance</field>
         <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='employee_id']" position="after">
-                <field name="face_image"/>
+                <field name="face_image" widget="image"/>
             </xpath>
         </field>
     </record>
+
+    <!-- Action mở danh sách attendance -->
+    <record id="action_face_attendance" model="ir.actions.act_window">
+        <field name="name">Face Attendance</field>
+        <field name="res_model">hr.attendance</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- Menu mới dưới Attendance -->
+    <menuitem id="menu_face_attendance"
+              name="Face Attendance"
+              parent="hr_attendance.menu_hr_attendance_root"
+              action="action_face_attendance"
+              sequence="20"/>
 </odoo>
