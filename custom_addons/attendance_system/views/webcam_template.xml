@@ -28,6 +28,10 @@
                             <span>🚪</span>
                             <span>Check Out</span>
                         </button>
+                        <button id="back_btn" class="btn btn-secondary" type="button">
+                            <span>🔙</span>
+                            <span>Back</span>
+                        </button>
                     </div>
                     
                     <div id="result" class="result" style="display: none;"></div>
@@ -137,6 +141,15 @@
                     min-width: 140px;
                     justify-content: center;
                 }
+
+                .btn-secondary {
+                    background: linear-gradient(45deg, #b0bec5, #78909c);
+                    color: white;
+                }
+                .btn-secondary:hover:not(:disabled) {
+                    transform: translateY(-1px);
+                    box-shadow: 0 2px 6px rgba(120, 144, 156, 0.3);
+                }
                 
                 .btn-primary {
                     background: linear-gradient(45deg, #667eea, #764ba2);
@@ -230,6 +243,7 @@
                     const captureBtn = document.getElementById('capture');
                     const checkInBtn = document.getElementById('check_in');
                     const checkOutBtn = document.getElementById('check_out');
+                    const backBtn = document.getElementById('back_btn');
                     const resultDiv = document.getElementById('result');
                     let imageData = null;
                     
@@ -330,6 +344,10 @@
                             checkOutBtn.disabled = false;
                             checkOutBtn.innerHTML = '<span>🚪</span><span>Check Out</span>';
                         });
+                    });
+
+                    backBtn.addEventListener('click', function() {
+                        window.history.back();
                     });
                     
                     function resetCamera() {
