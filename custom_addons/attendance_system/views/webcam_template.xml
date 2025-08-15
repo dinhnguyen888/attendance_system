@@ -2,43 +2,64 @@
 <odoo>
     <template id="webcam_template" name="Webcam Attendance">
         <t t-name="attendance_system.webcam_template">
-            <div class="container">
-                <div class="card">
-                    <div class="header">
-                        <h1>Face Attendance</h1>
-                        <p>Position your face in the guide</p>
+            <div class="o_webcam_attendance_container">
+                <div class="o_webcam_card">
+                    <!-- Header Section -->
+                    <div class="o_webcam_header">
+                        <div class="o_webcam_header_content">
+                            <h1 class="o_webcam_title">
+                                <i class="fa fa-camera-retro me-2"></i>
+                                Face Attendance System
+                            </h1>
+                            <p class="o_webcam_subtitle">
+                                Position your face within the guide frame
+                            </p>
+                        </div>
                     </div>
                     
-                    <div class="camera">
-                        <video id="webcam" autoplay="autoplay" muted="muted"></video>
-                        <canvas id="canvas" style="display: none;"></canvas>
-                        <div class="guide"></div>
+                    <!-- Camera Section -->
+                    <div class="o_webcam_camera_section">
+                        <div class="o_webcam_camera_container">
+                            <video id="webcam" autoplay="autoplay" muted="muted" class="o_webcam_video"></video>
+                            <canvas id="canvas" class="o_webcam_canvas" style="display: none;"></canvas>
+                            <div class="o_webcam_guide">
+                                <div class="o_webcam_guide_frame"></div>
+                            </div>
+                        </div>
                     </div>
                     
-                    <div class="buttons">
-                        <button id="capture" class="btn btn-primary">
-                            <span>📷</span>
-                            <span>Capture</span>
-                        </button>
-                        <button id="check_in" class="btn btn-success" disabled="disabled">
-                            <span>✅</span>
-                            <span>Check In</span>
-                        </button>
-                        <button id="check_out" class="btn btn-warning" disabled="disabled">
-                            <span>🚪</span>
-                            <span>Check Out</span>
-                        </button>
-                        <button id="back_btn" class="btn btn-secondary" type="button">
-                            <span>🔙</span>
-                            <span>Back</span>
-                        </button>
+                    <!-- Action Buttons -->
+                    <div class="o_webcam_actions">
+                        <div class="o_webcam_button_group">
+                            <button id="capture" class="btn btn-primary o_webcam_btn o_webcam_btn_capture">
+                                <i class="fa fa-camera me-2"></i>
+                                <span>Capture</span>
+                            </button>
+                            
+                            <button id="check_in" class="btn btn-success o_webcam_btn o_webcam_btn_checkin" disabled="disabled">
+                                <i class="fa fa-sign-in me-2"></i>
+                                <span>Check In</span>
+                            </button>
+                            
+                            <button id="check_out" class="btn btn-warning o_webcam_btn o_webcam_btn_checkout" disabled="disabled">
+                                <i class="fa fa-sign-out me-2"></i>
+                                <span>Check Out</span>
+                            </button>
+                            
+                            <button id="back_btn" class="btn btn-secondary o_webcam_btn o_webcam_btn_back">
+                                <i class="fa fa-arrow-left me-2"></i>
+                                <span>Back</span>
+                            </button>
+                        </div>
                     </div>
                     
-                    <div id="result" class="result" style="display: none;"></div>
+                    <!-- Result Messages -->
+                    <div id="result" class="o_webcam_result" style="display: none;"></div>
                 </div>
             </div>
             
             <style>
+                /* Reset and Base Styles */
                 * {
                     margin: 0;
                     padding: 0;
@@ -47,191 +68,357 @@
                 
                 body {
                     overflow: hidden;
-                    font-family: Arial, sans-serif;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
                 }
                 
-                .container {
+                .o_webcam_attendance_container {
                     width: 100vw;
                     height: 100vh;
-                    background: linear-gradient(45deg, #667eea, #764ba2);
+                    background: #f8f9fa;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    padding: 2px;
+                    padding: 0;
+                    overflow: hidden;
                 }
                 
-                .card {
-                    background: white;
-                    border-radius: 16px;
-                    box-shadow: 0 12px 35px rgba(0,0,0,0.2);
+                /* Main Card */
+                .o_webcam_card {
+                    background: #ffffff;
+                    border-radius: 0.5rem;
+                    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
                     width: 100%;
-                    max-width: 700px;
-                    height: 90vh;
+                    height: 100vh;
                     display: flex;
                     flex-direction: column;
+                    overflow: hidden;
+                    border: 1px solid #dee2e6;
                 }
                 
-                .header {
-                    background: linear-gradient(45deg, #667eea, #764ba2);
+                /* Header Styles - Odoo Theme */
+                .o_webcam_header {
+                    background: #7c3aed;
                     color: white;
-                    padding: 8px;
+                    padding: 1rem;
                     text-align: center;
-                    border-radius: 8px 8px 0 0;
+                    flex-shrink: 0;
                 }
                 
-                .header h1 {
-                    font-size: 32px;
-                    margin-bottom: 6px;
+                .o_webcam_title {
+                    font-size: 1.5rem;
+                    font-weight: 600;
+                    margin: 0 0 0.25rem 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
                 }
                 
-                .header p {
-                    font-size: 18px;
+                .o_webcam_subtitle {
+                    font-size: 0.875rem;
                     opacity: 0.9;
+                    margin: 0;
+                    font-weight: 400;
                 }
                 
-                .camera {
+                /* Camera Section */
+                .o_webcam_camera_section {
                     flex: 1;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    padding: 8px;
+                    padding: 1rem;
+                    background: #f8f9fa;
                     position: relative;
+                    min-height: 0;
                 }
                 
-                #webcam, #canvas {
-                    width: 480px;
-                    height: 360px;
+                .o_webcam_camera_container {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    height: 100%;
+                }
+                
+                .o_webcam_video,
+                .o_webcam_canvas {
+                    max-width: 100%;
+                    max-height: 100%;
+                    width: auto;
+                    height: auto;
                     object-fit: cover;
                     transform: scaleX(-1);
-                    border-radius: 12px;
-                    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+                    border-radius: 0.5rem;
+                    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+                    border: 2px solid #ffffff;
                 }
                 
-                .guide {
+                /* Guide Frame */
+                .o_webcam_guide {
                     position: absolute;
                     top: 50%;
                     left: 50%;
                     transform: translate(-50%, -50%);
-                    width: 150px;
-                    height: 180px;
-                    border: 4px solid rgba(255,255,255,0.9);
-                    border-radius: 50%;
-                    box-shadow: 0 0 15px rgba(255,255,255,0.5);
                     pointer-events: none;
                 }
                 
-                .buttons {
-                    padding: 8px;
+                .o_webcam_guide_frame {
+                    width: 200px;
+                    height: 250px;
+                    border: 3px solid rgba(255, 255, 255, 0.9);
+                    border-radius: 50%;
+                    box-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
+                }
+                
+                /* Action Buttons */
+                .o_webcam_actions {
+                    padding: 1rem;
+                    background: #ffffff;
+                    border-top: 1px solid #dee2e6;
+                    flex-shrink: 0;
+                }
+                
+                .o_webcam_button_group {
                     display: flex;
-                    gap: 4px;
+                    gap: 0.5rem;
                     justify-content: center;
                     flex-wrap: wrap;
                 }
                 
-                .btn {
-                    display: flex;
+                /* Odoo Button Styles */
+                .o_webcam_btn {
+                    display: inline-flex;
                     align-items: center;
-                    gap: 8px;
-                    padding: 16px 28px;
-                    border: none;
-                    border-radius: 12px;
-                    font-size: 18px;
-                    font-weight: 600;
-                    cursor: pointer;
-                    transition: all 0.3s;
-                    min-width: 140px;
                     justify-content: center;
+                    padding: 0.5rem 1rem;
+                    border: 1px solid transparent;
+                    border-radius: 0.375rem;
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                    text-decoration: none;
+                    cursor: pointer;
+                    transition: all 0.15s ease-in-out;
+                    min-width: 100px;
+                    position: relative;
+                    overflow: hidden;
                 }
-
-                .btn-secondary {
-                    background: linear-gradient(45deg, #b0bec5, #78909c);
-                    color: white;
-                }
-                .btn-secondary:hover:not(:disabled) {
+                
+                .o_webcam_btn:hover {
                     transform: translateY(-1px);
-                    box-shadow: 0 2px 6px rgba(120, 144, 156, 0.3);
                 }
                 
-                .btn-primary {
-                    background: linear-gradient(45deg, #667eea, #764ba2);
-                    color: white;
+                .o_webcam_btn:active {
+                    transform: translateY(0);
                 }
                 
-                .btn-primary:hover {
-                    transform: translateY(-1px);
-                    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+                .o_webcam_btn:focus {
+                    outline: none;
+                    box-shadow: 0 0 0 0.2rem rgba(124, 58, 237, 0.25);
                 }
                 
-                .btn-success {
-                    background: linear-gradient(45deg, #56ab2f, #a8e6cf);
-                    color: white;
-                }
-                
-                .btn-success:hover:not(:disabled) {
-                    transform: translateY(-1px);
-                    box-shadow: 0 2px 6px rgba(86, 171, 47, 0.3);
-                }
-                
-                .btn-warning {
-                    background: linear-gradient(45deg, #f39c12, #e67e22);
+                /* Button Variants - Odoo Colors */
+                .o_webcam_btn_capture {
+                    background-color: #7c3aed;
+                    border-color: #7c3aed;
                     color: white;
                 }
                 
-                .btn-warning:hover:not(:disabled) {
-                    transform: translateY(-1px);
-                    box-shadow: 0 2px 6px rgba(243, 156, 18, 0.3);
+                .o_webcam_btn_capture:hover {
+                    background-color: #6d28d9;
+                    border-color: #6d28d9;
                 }
                 
-                .btn:disabled {
-                    background: #ccc;
+                .o_webcam_btn_checkin {
+                    background-color: #059669;
+                    border-color: #059669;
+                    color: white;
+                }
+                
+                .o_webcam_btn_checkin:hover:not(:disabled) {
+                    background-color: #047857;
+                    border-color: #047857;
+                }
+                
+                .o_webcam_btn_checkout {
+                    background-color: #d97706;
+                    border-color: #d97706;
+                    color: white;
+                }
+                
+                .o_webcam_btn_checkout:hover:not(:disabled) {
+                    background-color: #b45309;
+                    border-color: #b45309;
+                }
+                
+                .o_webcam_btn_back {
+                    background-color: #6b7280;
+                    border-color: #6b7280;
+                    color: white;
+                }
+                
+                .o_webcam_btn_back:hover {
+                    background-color: #4b5563;
+                    border-color: #4b5563;
+                }
+                
+                /* Disabled State */
+                .o_webcam_btn:disabled {
+                    background-color: #e5e7eb !important;
+                    border-color: #e5e7eb !important;
+                    color: #9ca3af !important;
                     cursor: not-allowed;
-                    transform: none;
-                    box-shadow: none;
+                    transform: none !important;
                 }
                 
-                .result {
-                    margin: 0 16px 16px 16px;
-                    padding: 14px;
-                    border-radius: 8px;
+                /* Result Messages */
+                .o_webcam_result {
+                    margin: 0 1rem 1rem 1rem;
+                    padding: 0.75rem 1rem;
+                    border-radius: 0.375rem;
                     text-align: center;
-                    font-weight: 600;
-                    font-size: 16px;
+                    font-weight: 500;
+                    font-size: 0.875rem;
+                    border: 1px solid transparent;
+                    animation: slideIn 0.3s ease-out;
                 }
                 
-                .result.success {
-                    background: #d4edda;
-                    color: #155724;
-                    border: 1px solid #c3e6cb;
+                @keyframes slideIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(-5px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
                 }
                 
-                .result.error {
-                    background: #f8d7da;
-                    color: #721c24;
-                    border: 1px solid #f5c6cb;
+                .o_webcam_result.success {
+                    background-color: #d1fae5;
+                    color: #065f46;
+                    border-color: #10b981;
                 }
                 
+                .o_webcam_result.error {
+                    background-color: #fee2e2;
+                    color: #991b1b;
+                    border-color: #ef4444;
+                }
+                
+                /* Responsive Design */
                 @media (max-width: 768px) {
-                    .container {
-                        padding: 1px;
+                    .o_webcam_attendance_container {
+                        padding: 0;
                     }
                     
-                    .card {
-                        height: 75vh;
+                    .o_webcam_card {
+                        border-radius: 0;
+                        height: 100vh;
                     }
                     
-                    #webcam, #canvas {
-                        width: 160px;
+                    .o_webcam_header {
+                        padding: 0.75rem;
+                    }
+                    
+                    .o_webcam_title {
+                        font-size: 1.25rem;
+                    }
+                    
+                    .o_webcam_subtitle {
+                        font-size: 0.8rem;
+                    }
+                    
+                    .o_webcam_camera_section {
+                        padding: 0.5rem;
+                    }
+                    
+                    .o_webcam_guide_frame {
+                        width: 140px;
+                        height: 180px;
+                    }
+                    
+                    .o_webcam_actions {
+                        padding: 0.75rem;
+                    }
+                    
+                    .o_webcam_button_group {
+                        flex-direction: column;
+                        align-items: center;
+                        gap: 0.5rem;
+                    }
+                    
+                    .o_webcam_btn {
+                        padding: 0.75rem 1rem;
+                        font-size: 0.9rem;
+                        min-width: 200px;
+                        width: 100%;
+                        max-width: 280px;
+                    }
+                }
+                
+                @media (max-width: 480px) {
+                    .o_webcam_title {
+                        font-size: 1.125rem;
+                    }
+                    
+                    .o_webcam_subtitle {
+                        font-size: 0.75rem;
+                    }
+                    
+                    .o_webcam_guide_frame {
+                        width: 120px;
+                        height: 150px;
+                    }
+                    
+                    .o_webcam_btn {
+                        padding: 0.6rem 0.8rem;
+                        font-size: 0.85rem;
+                        min-width: 180px;
+                        width: 100%;
+                        max-width: 250px;
+                    }
+                }
+                
+                /* Landscape orientation for mobile */
+                @media (max-height: 500px) and (orientation: landscape) {
+                    .o_webcam_header {
+                        padding: 0.5rem;
+                    }
+                    
+                    .o_webcam_title {
+                        font-size: 1rem;
+                        margin-bottom: 0.125rem;
+                    }
+                    
+                    .o_webcam_subtitle {
+                        font-size: 0.75rem;
+                    }
+                    
+                    .o_webcam_camera_section {
+                        padding: 0.25rem;
+                    }
+                    
+                    .o_webcam_guide_frame {
+                        width: 100px;
                         height: 120px;
                     }
                     
-                    .buttons {
-                        flex-direction: column;
-                        align-items: center;
+                    .o_webcam_actions {
+                        padding: 0.5rem;
                     }
                     
-                    .btn {
-                        width: 100%;
-                        max-width: 80px;
+                    .o_webcam_button_group {
+                        flex-direction: row;
+                        gap: 0.25rem;
+                    }
+                    
+                    .o_webcam_btn {
+                        padding: 0.4rem 0.6rem;
+                        font-size: 0.75rem;
+                        min-width: 80px;
+                        width: auto;
+                        max-width: none;
                     }
                 }
             </style>
@@ -248,7 +435,17 @@
                     const resultDiv = document.getElementById('result');
                     let imageData = null;
                     
-                    navigator.mediaDevices.getUserMedia({ video: true })
+                    // Initialize camera with responsive settings
+                    function initializeCamera() {
+                        const constraints = {
+                            video: {
+                                width: { ideal: window.innerWidth > 768 ? 1280 : 640 },
+                                height: { ideal: window.innerWidth > 768 ? 720 : 480 },
+                                facingMode: 'user'
+                            }
+                        };
+                        
+                        navigator.mediaDevices.getUserMedia(constraints)
                         .then(stream => {
                             video.srcObject = stream;
                         })
@@ -256,33 +453,61 @@
                             console.error('Camera access error:', err);
                             showResult('Camera access denied. Please check permissions.', 'error');
                         });
+                    }
                     
-                    captureBtn.addEventListener('click', function() {
+                    initializeCamera();
+                    
+                    // Handle window resize
+                    window.addEventListener('resize', function() {
+                        // Reinitialize camera on resize for better responsive behavior
+                        if (video.srcObject) {
+                            const tracks = video.srcObject.getTracks();
+                            tracks.forEach(track => track.stop());
+                        }
+                        setTimeout(initializeCamera, 100);
+                    });
+                    
+                    // Capture button functionality
+                    function capturePhoto() {
                         const context = canvas.getContext('2d');
                         canvas.width = video.videoWidth;
                         canvas.height = video.videoHeight;
                         context.drawImage(video, 0, 0);
-                        imageData = canvas.toDataURL('image/jpeg', 0.8);
+                        imageData = canvas.toDataURL('image/jpeg', 0.9);
                         
+                        // Show captured image
                         video.style.display = 'none';
                         canvas.style.display = 'block';
+                        
+                        // Enable action buttons
                         checkInBtn.disabled = false;
                         checkOutBtn.disabled = false;
                         
-                        captureBtn.innerHTML = '<span>🔄</span><span>Retake</span>';
-                        captureBtn.addEventListener('click', resetCamera, { once: true });
-                    });
+                        // Update capture button
+                        captureBtn.innerHTML = '<i class="fa fa-refresh me-2"></i><span>Retake</span>';
+                        captureBtn.className = 'btn btn-info o_webcam_btn o_webcam_btn_capture';
+                        
+                        // Remove capture listener and add retake listener
+                        captureBtn.removeEventListener('click', capturePhoto);
+                        captureBtn.addEventListener('click', resetCamera);
+                        
+                        showResult('Photo captured successfully!', 'success');
+                    }
                     
+                    captureBtn.addEventListener('click', capturePhoto);
+                    
+                    // Check In functionality
                     checkInBtn.addEventListener('click', function() {
                         if (!imageData) return;
                         
-                        checkInBtn.disabled = true;
-                        checkOutBtn.disabled = true;
-                        checkInBtn.innerHTML = '<span>⏳</span><span>Processing...</span>';
+                        setButtonLoading(checkInBtn, 'Processing...', 'fa-spinner fa-spin');
                         
                         fetch('/attendance/check_in', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
                             body: JSON.stringify({
                                 jsonrpc: '2.0',
                                 method: 'call',
@@ -293,33 +518,36 @@
                         .then(data => {
                             const result = data.result;
                             if (result && result.success) {
-                                showResult('Check-in successful!', 'success');
+                                showResult('✅ Check-in successful!', 'success');
+                                setTimeout(() => {
+                                    resetCamera();
+                                }, 2000);
                             } else {
-                                const errorMsg = result ? result.error : 'Unknown error';
-                                showResult('Error: ' + errorMsg, 'error');
+                                const errorMsg = result ? result.error : 'Unknown error occurred';
+                                showResult('❌ Check-in failed: ' + errorMsg, 'error');
                             }
                         })
                         .catch(error => {
                             console.error('Request error:', error);
-                            showResult('Connection error', 'error');
+                            showResult('❌ Connection error. Please try again.', 'error');
                         })
                         .finally(() => {
-                            checkInBtn.disabled = false;
-                            checkOutBtn.disabled = false;
-                            checkInBtn.innerHTML = '<span>✅</span><span>Check In</span>';
+                            resetButton(checkInBtn, 'Check In', 'fa-sign-in');
                         });
                     });
                     
+                    // Check Out functionality
                     checkOutBtn.addEventListener('click', function() {
                         if (!imageData) return;
                         
-                        checkInBtn.disabled = true;
-                        checkOutBtn.disabled = true;
-                        checkOutBtn.innerHTML = '<span>⏳</span><span>Processing...</span>';
+                        setButtonLoading(checkOutBtn, 'Processing...', 'fa-spinner fa-spin');
                         
                         fetch('/attendance/check_out', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
                             body: JSON.stringify({
                                 jsonrpc: '2.0',
                                 method: 'call',
@@ -330,41 +558,69 @@
                         .then(data => {
                             const result = data.result;
                             if (result && result.success) {
-                                showResult('Check-out successful!', 'success');
+                                showResult('✅ Check-out successful!', 'success');
+                                setTimeout(() => {
+                                    resetCamera();
+                                }, 2000);
                             } else {
-                                const errorMsg = result ? result.error : 'Unknown error';
-                                showResult('Error: ' + errorMsg, 'error');
+                                const errorMsg = result ? result.error : 'Unknown error occurred';
+                                showResult('❌ Check-out failed: ' + errorMsg, 'error');
                             }
                         })
                         .catch(error => {
                             console.error('Request error:', error);
-                            showResult('Connection error', 'error');
+                            showResult('❌ Connection error. Please try again.', 'error');
                         })
                         .finally(() => {
-                            checkInBtn.disabled = false;
-                            checkOutBtn.disabled = false;
-                            checkOutBtn.innerHTML = '<span>🚪</span><span>Check Out</span>';
+                            resetButton(checkOutBtn, 'Check Out', 'fa-sign-out');
                         });
                     });
 
+                    // Back button functionality
                     backBtn.addEventListener('click', function() {
                         window.history.back();
                     });
                     
+                    // Utility functions
                     function resetCamera() {
                         video.style.display = 'block';
                         canvas.style.display = 'none';
                         checkInBtn.disabled = true;
                         checkOutBtn.disabled = true;
                         imageData = null;
-                        captureBtn.innerHTML = '<span>📷</span><span>Capture</span>';
+                        
+                        // Reset capture button
+                        captureBtn.innerHTML = '<i class="fa fa-camera me-2"></i><span>Capture</span>';
+                        captureBtn.className = 'btn btn-primary o_webcam_btn o_webcam_btn_capture';
+                        
+                        // Remove retake listener and add capture listener
+                        captureBtn.removeEventListener('click', resetCamera);
+                        captureBtn.addEventListener('click', capturePhoto);
+                        
                         resultDiv.style.display = 'none';
+                    }
+                    
+                    function setButtonLoading(button, text, iconClass) {
+                        button.disabled = true;
+                        button.innerHTML = `<i class="fa ${iconClass} me-2"></i><span>${text}</span>`;
+                    }
+                    
+                    function resetButton(button, text, iconClass) {
+                        button.disabled = false;
+                        button.innerHTML = `<i class="fa ${iconClass} me-2"></i><span>${text}</span>`;
                     }
                     
                     function showResult(message, type) {
                         resultDiv.textContent = message;
-                        resultDiv.className = `result ${type}`;
+                        resultDiv.className = `o_webcam_result ${type}`;
                         resultDiv.style.display = 'block';
+                        
+                        // Auto-hide success messages after 3 seconds
+                        if (type === 'success') {
+                            setTimeout(() => {
+                                resultDiv.style.display = 'none';
+                            }, 3000);
+                        }
                     }
                 });
                 ]]>
