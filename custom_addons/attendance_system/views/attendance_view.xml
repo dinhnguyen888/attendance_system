@@ -10,12 +10,34 @@
         </field>
     </record>
 
+     <record id="view_hr_attendance_tree_no_create" model="ir.ui.view">
+        <field name="name">hr.attendance.tree.no.create</field>
+        <field name="model">hr.attendance</field>
+        <field name="inherit_id" ref="hr_attendance.view_attendance_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//tree" position="attributes">
+                <attribute name="create">false</attribute>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_hr_attendance_form_no_create" model="ir.ui.view">
+    <field name="name">hr.attendance.form.no.create</field>
+    <field name="model">hr.attendance</field>
+    <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
+    <field name="arch" type="xml">
+        <xpath expr="//form" position="attributes">
+            <attribute name="create">false</attribute>
+        </xpath>
+    </field>
+</record>
+
     <record id="action_webcam_attendance" model="ir.actions.server">
         <field name="name">Face Attendance</field>
         <field name="model_id" ref="hr_attendance.model_hr_attendance"/>
         <field name="state">code</field>
         <field name="code">action = {'type': 'ir.actions.act_url', 'url': '/attendance/webcam', 'target': 'self'}</field>
     </record>
+    
 
     <menuitem id="menu_webcam_attendance"
               name="Face Attendance"
