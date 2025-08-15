@@ -1,0 +1,355 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="webcam_template" name="Webcam Attendance">
+        <t t-name="attendance_system.webcam_template">
+            <div class="container">
+                <div class="card">
+                    <div class="header">
+                        <h1>Face Attendance</h1>
+                        <p>Position your face in the guide</p>
+                    </div>
+                    
+                    <div class="camera">
+                        <video id="webcam" autoplay="autoplay" muted="muted"></video>
+                        <canvas id="canvas" style="display: none;"></canvas>
+                        <div class="guide"></div>
+                    </div>
+                    
+                    <div class="buttons">
+                        <button id="capture" class="btn btn-primary">
+                            <span>📷</span>
+                            <span>Capture</span>
+                        </button>
+                        <button id="check_in" class="btn btn-success" disabled="disabled">
+                            <span>✅</span>
+                            <span>Check In</span>
+                        </button>
+                        <button id="check_out" class="btn btn-warning" disabled="disabled">
+                            <span>🚪</span>
+                            <span>Check Out</span>
+                        </button>
+                    </div>
+                    
+                    <div id="result" class="result" style="display: none;"></div>
+                </div>
+            </div>
+            
+            <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                
+                body {
+                    overflow: hidden;
+                    font-family: Arial, sans-serif;
+                }
+                
+                .container {
+                    width: 100vw;
+                    height: 100vh;
+                    background: linear-gradient(45deg, #667eea, #764ba2);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 2px;
+                }
+                
+                .card {
+                    background: white;
+                    border-radius: 16px;
+                    box-shadow: 0 12px 35px rgba(0,0,0,0.2);
+                    width: 100%;
+                    max-width: 700px;
+                    height: 90vh;
+                    display: flex;
+                    flex-direction: column;
+                }
+                
+                .header {
+                    background: linear-gradient(45deg, #667eea, #764ba2);
+                    color: white;
+                    padding: 8px;
+                    text-align: center;
+                    border-radius: 8px 8px 0 0;
+                }
+                
+                .header h1 {
+                    font-size: 32px;
+                    margin-bottom: 6px;
+                }
+                
+                .header p {
+                    font-size: 18px;
+                    opacity: 0.9;
+                }
+                
+                .camera {
+                    flex: 1;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 8px;
+                    position: relative;
+                }
+                
+                #webcam, #canvas {
+                    width: 480px;
+                    height: 360px;
+                    object-fit: cover;
+                    border-radius: 12px;
+                    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+                }
+                
+                .guide {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    width: 150px;
+                    height: 180px;
+                    border: 4px solid rgba(255,255,255,0.9);
+                    border-radius: 50%;
+                    box-shadow: 0 0 15px rgba(255,255,255,0.5);
+                    pointer-events: none;
+                }
+                
+                .buttons {
+                    padding: 8px;
+                    display: flex;
+                    gap: 4px;
+                    justify-content: center;
+                    flex-wrap: wrap;
+                }
+                
+                .btn {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 16px 28px;
+                    border: none;
+                    border-radius: 12px;
+                    font-size: 18px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                    min-width: 140px;
+                    justify-content: center;
+                }
+                
+                .btn-primary {
+                    background: linear-gradient(45deg, #667eea, #764ba2);
+                    color: white;
+                }
+                
+                .btn-primary:hover {
+                    transform: translateY(-1px);
+                    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+                }
+                
+                .btn-success {
+                    background: linear-gradient(45deg, #56ab2f, #a8e6cf);
+                    color: white;
+                }
+                
+                .btn-success:hover:not(:disabled) {
+                    transform: translateY(-1px);
+                    box-shadow: 0 2px 6px rgba(86, 171, 47, 0.3);
+                }
+                
+                .btn-warning {
+                    background: linear-gradient(45deg, #f39c12, #e67e22);
+                    color: white;
+                }
+                
+                .btn-warning:hover:not(:disabled) {
+                    transform: translateY(-1px);
+                    box-shadow: 0 2px 6px rgba(243, 156, 18, 0.3);
+                }
+                
+                .btn:disabled {
+                    background: #ccc;
+                    cursor: not-allowed;
+                    transform: none;
+                    box-shadow: none;
+                }
+                
+                .result {
+                    margin: 0 16px 16px 16px;
+                    padding: 14px;
+                    border-radius: 8px;
+                    text-align: center;
+                    font-weight: 600;
+                    font-size: 16px;
+                }
+                
+                .result.success {
+                    background: #d4edda;
+                    color: #155724;
+                    border: 1px solid #c3e6cb;
+                }
+                
+                .result.error {
+                    background: #f8d7da;
+                    color: #721c24;
+                    border: 1px solid #f5c6cb;
+                }
+                
+                @media (max-width: 768px) {
+                    .container {
+                        padding: 1px;
+                    }
+                    
+                    .card {
+                        height: 75vh;
+                    }
+                    
+                    #webcam, #canvas {
+                        width: 160px;
+                        height: 120px;
+                    }
+                    
+                    .buttons {
+                        flex-direction: column;
+                        align-items: center;
+                    }
+                    
+                    .btn {
+                        width: 100%;
+                        max-width: 80px;
+                    }
+                }
+            </style>
+            
+            <script type="text/javascript">
+                <![CDATA[
+                document.addEventListener('DOMContentLoaded', function() {
+                    const video = document.getElementById('webcam');
+                    const canvas = document.getElementById('canvas');
+                    const captureBtn = document.getElementById('capture');
+                    const checkInBtn = document.getElementById('check_in');
+                    const checkOutBtn = document.getElementById('check_out');
+                    const resultDiv = document.getElementById('result');
+                    let imageData = null;
+                    
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(stream => {
+                            video.srcObject = stream;
+                        })
+                        .catch(err => {
+                            console.error('Camera access error:', err);
+                            showResult('Camera access denied. Please check permissions.', 'error');
+                        });
+                    
+                    captureBtn.addEventListener('click', function() {
+                        const context = canvas.getContext('2d');
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        context.drawImage(video, 0, 0);
+                        imageData = canvas.toDataURL('image/jpeg', 0.8);
+                        
+                        video.style.display = 'none';
+                        canvas.style.display = 'block';
+                        checkInBtn.disabled = false;
+                        checkOutBtn.disabled = false;
+                        
+                        captureBtn.innerHTML = '<span>🔄</span><span>Retake</span>';
+                        captureBtn.addEventListener('click', resetCamera, { once: true });
+                    });
+                    
+                    checkInBtn.addEventListener('click', function() {
+                        if (!imageData) return;
+                        
+                        checkInBtn.disabled = true;
+                        checkOutBtn.disabled = true;
+                        checkInBtn.innerHTML = '<span>⏳</span><span>Processing...</span>';
+                        
+                        fetch('/attendance/check_in', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0',
+                                method: 'call',
+                                params: { face_image: imageData }
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            const result = data.result;
+                            if (result && result.success) {
+                                showResult('Check-in successful!', 'success');
+                            } else {
+                                const errorMsg = result ? result.error : 'Unknown error';
+                                showResult('Error: ' + errorMsg, 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Request error:', error);
+                            showResult('Connection error', 'error');
+                        })
+                        .finally(() => {
+                            checkInBtn.disabled = false;
+                            checkOutBtn.disabled = false;
+                            checkInBtn.innerHTML = '<span>✅</span><span>Check In</span>';
+                        });
+                    });
+                    
+                    checkOutBtn.addEventListener('click', function() {
+                        if (!imageData) return;
+                        
+                        checkInBtn.disabled = true;
+                        checkOutBtn.disabled = true;
+                        checkOutBtn.innerHTML = '<span>⏳</span><span>Processing...</span>';
+                        
+                        fetch('/attendance/check_out', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                jsonrpc: '2.0',
+                                method: 'call',
+                                params: { face_image: imageData }
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            const result = data.result;
+                            if (result && result.success) {
+                                showResult('Check-out successful!', 'success');
+                            } else {
+                                const errorMsg = result ? result.error : 'Unknown error';
+                                showResult('Error: ' + errorMsg, 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Request error:', error);
+                            showResult('Connection error', 'error');
+                        })
+                        .finally(() => {
+                            checkInBtn.disabled = false;
+                            checkOutBtn.disabled = false;
+                            checkOutBtn.innerHTML = '<span>🚪</span><span>Check Out</span>';
+                        });
+                    });
+                    
+                    function resetCamera() {
+                        video.style.display = 'block';
+                        canvas.style.display = 'none';
+                        checkInBtn.disabled = true;
+                        checkOutBtn.disabled = true;
+                        imageData = null;
+                        captureBtn.innerHTML = '<span>📷</span><span>Capture</span>';
+                        resultDiv.style.display = 'none';
+                    }
+                    
+                    function showResult(message, type) {
+                        resultDiv.textContent = message;
+                        resultDiv.className = `result ${type}`;
+                        resultDiv.style.display = 'block';
+                    }
+                });
+                ]]>
+            </script>
+        </t>
+    </template>
+</odoo>
