@@ -24,5 +24,11 @@ services:
             - ./custom_addons:/mnt/extra-addons
             - ./odoo.conf:/etc/odoo/odoo.conf
 
+    custom_api_service:
+        build:
+            context: ./custom_api_services
+        ports:
+            - "8000:8000"
+
 volumes:
     odoo-db:
