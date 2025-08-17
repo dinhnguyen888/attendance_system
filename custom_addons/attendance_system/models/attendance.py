@@ -43,6 +43,41 @@ class HrEmployee(models.Model):
             'domain': [('employee_id', '=', self.id)],
             'context': {'default_employee_id': self.id}
         }
+    
+    def action_register_face_with_api(self):
+        """Đăng ký ảnh khuôn mặt hiện tại với API"""
+        self.ensure_one()
+        
+        if not self.has_face_data:
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Lỗi',
+                    'message': 'Nhân viên chưa có ảnh khuôn mặt để đăng ký',
+                    'type': 'danger',
+                }
+            }
+        
+        # Tìm ảnh khuôn mặt đang active
+        active_face = self.env['hr.employee.face'].search([
+            ('employee_id', '=', self.id),
+            ('is_active', '=', True)
+        ], limit=1)
+        
+        if not active_face:
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Lỗi',
+                    'message': 'Không tìm thấy ảnh khuôn mặt đang sử dụng',
+                    'type': 'danger',
+                }
+            }
+        
+        # Gọi method đăng ký API từ ảnh khuôn mặt
+        return active_face.action_register_with_api()
 
 class HrEmployeeFace(models.Model):
     _name = 'hr.employee.face'
@@ -65,27 +100,92 @@ class HrEmployeeFace(models.Model):
     
     @api.model
     def create(self, vals):
-        """Override create để tự động cập nhật employee"""
+        """Override create để tự động cập nhật employee và gọi API register"""
         record = super().create(vals)
-        if record.is_active and record.employee_id:
+        if record.is_active and record.employee_id and record.face_image:
             # Cập nhật ảnh chính của employee
             record.employee_id.write({
                 'face_image_data': record.face_image,
                 'face_registration_date': fields.Datetime.now()
             })
+            
+            # Gọi API register face
+            try:
+                import requests
+                import base64
+                
+                # Chuyển đổi ảnh thành base64
+                if record.face_image:
+                    image_data = base64.b64encode(record.face_image).decode('utf-8')
+                    
+                    # Gọi API register
+                    api_url = "http://face_recognition_api:8000/face-recognition/register"
+                    payload = {
+                        "face_image": image_data,
+                        "action": "register",
+                        "employee_id": record.employee_id.id
+                    }
+                    
+                    response = requests.post(
+                        api_url, 
+                        params={"employee_id": record.employee_id.id},
+                        json=payload,
+                        timeout=30
+                    )
+                    
+                    if response.status_code == 200:
+                        _logger.info(f"API register face thành công cho employee {record.employee_id.id}")
+                    else:
+                        _logger.error(f"API register face thất bại: {response.text}")
+                        
+            except Exception as e:
+                _logger.error(f"Lỗi khi gọi API register face: {str(e)}")
+        
         return record
     
     def write(self, vals):
-        """Override write để xử lý khi thay đổi trạng thái active"""
+        """Override write để xử lý khi thay đổi trạng thái active và gọi API register"""
         result = super().write(vals)
-        if 'is_active' in vals:
+        if 'is_active' in vals or 'face_image' in vals:
             for record in self:
-                if record.is_active and record.employee_id:
+                if record.is_active and record.employee_id and record.face_image:
                     # Cập nhật ảnh chính của employee
                     record.employee_id.write({
                         'face_image_data': record.face_image,
                         'face_registration_date': fields.Datetime.now()
                     })
+                    
+                    # Gọi API register face nếu có thay đổi ảnh
+                    if 'face_image' in vals:
+                        try:
+                            import requests
+                            import base64
+                            
+                            # Chuyển đổi ảnh thành base64
+                            image_data = base64.b64encode(record.face_image).decode('utf-8')
+                            
+                            # Gọi API register
+                            api_url = "http://face_recognition_api:8000/face-recognition/register"
+                            payload = {
+                                "face_image": image_data,
+                                "action": "register",
+                                "employee_id": record.employee_id.id
+                            }
+                            
+                            response = requests.post(
+                                api_url, 
+                                params={"employee_id": record.employee_id.id},
+                                json=payload,
+                                timeout=30
+                            )
+                            
+                            if response.status_code == 200:
+                                _logger.info(f"API register face thành công cho employee {record.employee_id.id}")
+                            else:
+                                _logger.error(f"API register face thất bại: {response.text}")
+                                
+                        except Exception as e:
+                            _logger.error(f"Lỗi khi gọi API register face: {str(e)}")
         return result
     
     def action_set_as_active(self):
@@ -140,6 +240,109 @@ class HrEmployeeFace(models.Model):
                 'type': 'success',
             }
         }
+    
+    def action_register_with_api(self):
+        """Đăng ký ảnh khuôn mặt với API face recognition"""
+        self.ensure_one()
+        
+        if not self.face_image:
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Lỗi',
+                    'message': 'Không có ảnh khuôn mặt để đăng ký',
+                    'type': 'danger',
+                }
+            }
+        
+        try:
+            import requests, base64
+            from odoo import fields
+            import logging
+            _logger = logging.getLogger(__name__)
+
+            # Decode ảnh từ base64 sang bytes
+            face_bytes = base64.b64decode(self.face_image)
+
+            api_url = "http://face_recognition_api:8000/face-recognition/register"
+
+            # multipart/form-data
+            files = {
+                'face_image': ('face.jpg', face_bytes, 'image/jpeg')
+            }
+            data = {
+                'action': 'register',
+                'employee_id': str(self.employee_id.id)
+            }
+
+            response = requests.post(
+                api_url,
+                files=files,
+                data=data,
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    # Cập nhật trạng thái
+                    self.write({
+                        'action': 'register',
+                        'notes': f'Đã đăng ký với API thành công - {fields.Datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
+                    })
+                    return {
+                        'type': 'ir.actions.client',
+                        'tag': 'display_notification',
+                        'params': {
+                            'title': 'Thành công',
+                            'message': f'Đã đăng ký ảnh "{self.name}" với API face recognition thành công!',
+                            'type': 'success',
+                        }
+                    }
+                else:
+                    return {
+                        'type': 'ir.actions.client',
+                        'tag': 'display_notification',
+                        'params': {
+                            'title': 'Lỗi API',
+                            'message': f'API trả về lỗi: {result.get("message", "Unknown error")}',
+                            'type': 'danger',
+                        }
+                    }
+            else:
+                return {
+                    'type': 'ir.actions.client',
+                    'tag': 'display_notification',
+                    'params': {
+                        'title': 'Lỗi kết nối',
+                        'message': f'Không thể kết nối API. Status code: {response.status_code}',
+                        'type': 'danger',
+                    }
+                }
+
+        except requests.exceptions.RequestException as e:
+            _logger.error(f"API request error: {str(e)}")
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Lỗi kết nối',
+                    'message': f'Không thể kết nối đến API face recognition: {str(e)}',
+                    'type': 'danger',
+                }
+            }
+        except Exception as e:
+            _logger.error(f"Unexpected error in API register: {str(e)}")
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Lỗi hệ thống',
+                    'message': f'Lỗi xử lý: {str(e)}',
+                    'type': 'danger',
+                }
+            }
 
 class HrFaceAttendance(models.Model):
     _inherit = 'hr.attendance'

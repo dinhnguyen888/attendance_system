@@ -31,6 +31,11 @@
                                 string="Đặt làm ảnh chính" 
                                 class="btn-primary"
                                 invisible="is_active"/>
+                        <button name="action_register_with_api" 
+                                type="object" 
+                                string="Đăng ký với API" 
+                                class="btn-success"
+                                invisible="not face_image"/>
                         <button name="action_delete_face" 
                                 type="object" 
                                 string="Xóa ảnh" 
@@ -57,6 +62,14 @@
                         <group>
                             <field name="notes" placeholder="Ghi chú về ảnh khuôn mặt này..."/>
                         </group>
+                        <div class="alert alert-info" role="alert">
+                            <strong>Lưu ý:</strong>
+                            <ul>
+                                <li>Nhấn "Đăng ký với API" để gửi ảnh khuôn mặt đến hệ thống nhận diện.</li>
+                                <li>Ảnh sẽ được lưu trong database và đồng bộ với API face recognition.</li>
+                                <li>Chỉ có thể đăng ký khi đã chọn ảnh khuôn mặt.</li>
+                            </ul>
+                        </div>
                     </sheet>
                 </form>
             </field>
@@ -126,6 +139,11 @@
                                         string="Đăng ký khuôn mặt" 
                                         class="btn-primary"
                                         invisible="has_face_data"/>
+                                <button name="action_register_face_with_api" 
+                                        type="object" 
+                                        string="Đăng ký với API" 
+                                        class="btn-success"
+                                        invisible="not has_face_data"/>
                                 <button name="action_manage_faces" 
                                         type="object" 
                                         string="Quản lý ảnh khuôn mặt" 
