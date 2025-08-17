@@ -1,5 +1,149 @@
 from odoo import models, fields, api
+import base64
+import logging
+
+_logger = logging.getLogger(__name__)
+
+class HrEmployee(models.Model):
+    _inherit = 'hr.employee'
+    
+    face_image_data = fields.Binary("Ảnh khuôn mặt đăng ký", attachment=True)
+    has_face_data = fields.Boolean("Đã đăng ký khuôn mặt", compute='_compute_has_face_data', store=True)
+    face_registration_date = fields.Datetime("Ngày đăng ký khuôn mặt", readonly=True)
+    face_management_ids = fields.One2many('hr.employee.face', 'employee_id', string="Quản lý ảnh khuôn mặt")
+    
+    @api.depends('face_image_data')
+    def _compute_has_face_data(self):
+        for employee in self:
+            employee.has_face_data = bool(employee.face_image_data)
+    
+    def action_register_face(self):
+        """Action để đăng ký khuôn mặt"""
+        self.ensure_one()
+        return {
+            'name': 'Đăng ký khuôn mặt',
+            'type': 'ir.actions.act_window',
+            'res_model': 'hr.employee.face',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'default_employee_id': self.id,
+                'default_action': 'register'
+            }
+        }
+    
+    def action_manage_faces(self):
+        """Action để quản lý ảnh khuôn mặt"""
+        self.ensure_one()
+        return {
+            'name': f'Quản lý ảnh khuôn mặt - {self.name}',
+            'type': 'ir.actions.act_window',
+            'res_model': 'hr.employee.face',
+            'view_mode': 'tree,form',
+            'domain': [('employee_id', '=', self.id)],
+            'context': {'default_employee_id': self.id}
+        }
+
+class HrEmployeeFace(models.Model):
+    _name = 'hr.employee.face'
+    _description = 'Quản lý ảnh khuôn mặt nhân viên'
+    _order = 'create_date desc'
+    
+    name = fields.Char("Tên ảnh", required=True)
+    employee_id = fields.Many2one('hr.employee', string="Nhân viên", required=True, ondelete='cascade')
+    face_image = fields.Binary("Ảnh khuôn mặt", attachment=True, required=True)
+    face_image_filename = fields.Char("Tên file ảnh")
+    is_active = fields.Boolean("Đang sử dụng", default=True)
+    action = fields.Selection([
+        ('register', 'Đăng ký'),
+        ('update', 'Cập nhật'),
+        ('backup', 'Sao lưu')
+    ], string="Hành động", default='register')
+    notes = fields.Text("Ghi chú")
+    create_date = fields.Datetime("Ngày tạo", readonly=True)
+    write_date = fields.Datetime("Ngày cập nhật", readonly=True)
+    
+    @api.model
+    def create(self, vals):
+        """Override create để tự động cập nhật employee"""
+        record = super().create(vals)
+        if record.is_active and record.employee_id:
+            # Cập nhật ảnh chính của employee
+            record.employee_id.write({
+                'face_image_data': record.face_image,
+                'face_registration_date': fields.Datetime.now()
+            })
+        return record
+    
+    def write(self, vals):
+        """Override write để xử lý khi thay đổi trạng thái active"""
+        result = super().write(vals)
+        if 'is_active' in vals:
+            for record in self:
+                if record.is_active and record.employee_id:
+                    # Cập nhật ảnh chính của employee
+                    record.employee_id.write({
+                        'face_image_data': record.face_image,
+                        'face_registration_date': fields.Datetime.now()
+                    })
+        return result
+    
+    def action_set_as_active(self):
+        """Đặt ảnh này làm ảnh chính"""
+        self.ensure_one()
+        # Tắt tất cả ảnh khác
+        self.search([
+            ('employee_id', '=', self.employee_id.id),
+            ('id', '!=', self.id)
+        ]).write({'is_active': False})
+        
+        # Bật ảnh này
+        self.write({'is_active': True})
+        
+        # Cập nhật employee
+        self.employee_id.write({
+            'face_image_data': self.face_image,
+            'face_registration_date': fields.Datetime.now()
+        })
+        
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': 'Thành công',
+                'message': f'Đã đặt ảnh "{self.name}" làm ảnh chính cho {self.employee_id.name}',
+                'type': 'success',
+            }
+        }
+    
+    def action_delete_face(self):
+        """Xóa ảnh khuôn mặt"""
+        self.ensure_one()
+        if self.is_active:
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Lỗi',
+                    'message': 'Không thể xóa ảnh đang được sử dụng. Vui lòng chọn ảnh khác làm ảnh chính trước.',
+                    'type': 'danger',
+                }
+            }
+        
+        self.unlink()
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': 'Thành công',
+                'message': f'Đã xóa ảnh "{self.name}"',
+                'type': 'success',
+            }
+        }
 
 class HrFaceAttendance(models.Model):
     _inherit = 'hr.attendance'
-    face_image = fields.Binary("Ảnh khuôn mặt")
+    
+    face_image = fields.Binary("Ảnh khuôn mặt check-in/out", attachment=True)
+    verification_confidence = fields.Float("Độ tin cậy xác thực", digits=(3, 2))
+    verification_message = fields.Text("Thông báo xác thực")

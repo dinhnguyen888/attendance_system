@@ -1,0 +1,193 @@
+/* Attendance System Custom CSS */
+
+/* Face Management Styles */
+.o_employee_face_management {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 10px 0;
+}
+
+.o_face_image_preview {
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px 0;
+    text-align: center;
+}
+
+.o_face_image_preview img {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 4px;
+}
+
+.o_face_status_active {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.o_face_status_inactive {
+    color: #6c757d;
+}
+
+/* Attendance Dashboard Styles */
+.o_attendance_dashboard {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    margin: 20px 0;
+}
+
+.o_attendance_stats {
+    display: flex;
+    justify-content: space-around;
+    margin: 20px 0;
+}
+
+.o_attendance_stat {
+    text-align: center;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    margin: 0 10px;
+}
+
+.o_attendance_stat_number {
+    font-size: 2em;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.o_attendance_stat_label {
+    font-size: 0.9em;
+    opacity: 0.9;
+}
+
+/* Webcam Interface Styles */
+.o_webcam_container {
+    text-align: center;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    margin: 20px 0;
+}
+
+.o_webcam_video {
+    border: 3px solid #007bff;
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+.o_webcam_canvas {
+    border: 3px solid #28a745;
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+.o_webcam_buttons {
+    margin: 20px 0;
+}
+
+.o_webcam_buttons .btn {
+    margin: 0 10px;
+    padding: 12px 24px;
+    font-size: 1.1em;
+    border-radius: 25px;
+}
+
+/* Face Recognition Status */
+.o_face_recognition_status {
+    padding: 15px;
+    border-radius: 8px;
+    margin: 10px 0;
+    text-align: center;
+    font-weight: bold;
+}
+
+.o_face_recognition_success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.o_face_recognition_error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.o_face_recognition_processing {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+/* Employee Face Management */
+.o_employee_face_list {
+    margin: 15px 0;
+}
+
+.o_face_item {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    margin: 5px 0;
+    background: white;
+}
+
+.o_face_item_active {
+    border-color: #28a745;
+    background-color: #f8fff9;
+}
+
+.o_face_item_image {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 15px;
+}
+
+.o_face_item_info {
+    flex: 1;
+}
+
+.o_face_item_actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .o_attendance_stats {
+        flex-direction: column;
+    }
+    
+    .o_attendance_stat {
+        margin: 5px 0;
+    }
+    
+    .o_webcam_buttons .btn {
+        display: block;
+        margin: 10px auto;
+        width: 200px;
+    }
+    
+    .o_face_item {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .o_face_item_image {
+        margin-right: 0;
+        margin-bottom: 10px;
+    }
+    
+    .o_face_item_actions {
+        margin-top: 10px;
+    }
+}

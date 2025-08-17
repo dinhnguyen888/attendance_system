@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Employee Face Management Tree View -->
+        <record id="view_employee_face_tree" model="ir.ui.view">
+            <field name="name">hr.employee.face.tree</field>
+            <field name="model">hr.employee.face</field>
+            <field name="arch" type="xml">
+                <tree string="Quản lý ảnh khuôn mặt">
+                    <field name="name"/>
+                    <field name="employee_id"/>
+                    <field name="face_image" widget="image" class="oe_avatar"/>
+                    <field name="is_active" widget="boolean_toggle"/>
+                    <field name="action"/>
+                    <field name="create_date"/>
+                    <field name="write_date"/>
+                    <field name="notes" optional="show"/>
+                </tree>
+            </field>
+        </record>
+
+        <!-- Employee Face Management Form View -->
+        <record id="view_employee_face_form" model="ir.ui.view">
+            <field name="name">hr.employee.face.form</field>
+            <field name="model">hr.employee.face</field>
+            <field name="arch" type="xml">
+                <form string="Quản lý ảnh khuôn mặt">
+                    <header>
+                        <button name="action_set_as_active" 
+                                type="object" 
+                                string="Đặt làm ảnh chính" 
+                                class="btn-primary"
+                                invisible="is_active"/>
+                        <button name="action_delete_face" 
+                                type="object" 
+                                string="Xóa ảnh" 
+                                class="btn-danger"
+                                invisible="is_active"/>
+                        <field name="is_active" widget="boolean_toggle"/>
+                    </header>
+                    <sheet>
+                        <group>
+                            <group>
+                                <field name="name"/>
+                                <field name="employee_id"/>
+                                <field name="action"/>
+                            </group>
+                            <group>
+                                <field name="create_date"/>
+                                <field name="write_date"/>
+                            </group>
+                        </group>
+                        <group>
+                            <field name="face_image" widget="image" class="oe_avatar"/>
+                            <field name="face_image_filename" invisible="1"/>
+                        </group>
+                        <group>
+                            <field name="notes" placeholder="Ghi chú về ảnh khuôn mặt này..."/>
+                        </group>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <!-- Employee Face Management Search View -->
+        <record id="view_employee_face_search" model="ir.ui.view">
+            <field name="name">hr.employee.face.search</field>
+            <field name="model">hr.employee.face</field>
+            <field name="arch" type="xml">
+                <search string="Tìm kiếm ảnh khuôn mặt">
+                    <field name="name"/>
+                    <field name="employee_id"/>
+                    <field name="action"/>
+                    <filter string="Đang sử dụng" name="active" domain="[('is_active', '=', True)]"/>
+                    <filter string="Không sử dụng" name="inactive" domain="[('is_active', '=', False)]"/>
+                    <group expand="0" string="Group By">
+                        <filter string="Nhân viên" name="group_employee" context="{'group_by': 'employee_id'}"/>
+                        <filter string="Hành động" name="group_action" context="{'group_by': 'action'}"/>
+                        <filter string="Trạng thái" name="group_status" context="{'group_by': 'is_active'}"/>
+                    </group>
+                </search>
+            </field>
+        </record>
+
+        <!-- Employee Face Management Action -->
+        <record id="action_employee_face_management" model="ir.actions.act_window">
+            <field name="name">Quản lý ảnh khuôn mặt</field>
+            <field name="res_model">hr.employee.face</field>
+            <field name="view_mode">tree,form</field>
+            <field name="view_id" ref="view_employee_face_tree"/>
+            <field name="search_view_id" ref="view_employee_face_search"/>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">
+                    Chưa có ảnh khuôn mặt nào được đăng ký
+                </p>
+                <p>
+                    Tạo ảnh khuôn mặt đầu tiên cho nhân viên để sử dụng hệ thống chấm công bằng nhận diện khuôn mặt.
+                </p>
+            </field>
+        </record>
+
+        <!-- Menu for Employee Face Management -->
+        <menuitem id="menu_employee_face_management"
+                  name="Quản lý ảnh khuôn mặt"
+                  parent="hr.menu_hr_root"
+                  action="action_employee_face_management"
+                  sequence="15"/>
+
+        <!-- Employee Form View Inheritance for Face Management -->
+        <record id="view_employee_form_face_management" model="ir.ui.view">
+            <field name="name">hr.employee.form.face.management</field>
+            <field name="model">hr.employee</field>
+            <field name="inherit_id" ref="hr.view_employee_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//notebook" position="inside">
+                    <page string="Face Recognition" name="face_recognition">
+                        <group>
+                            <group string="Thông tin khuôn mặt">
+                                <field name="face_image_data" widget="image" class="oe_avatar"/>
+                                <field name="has_face_data" readonly="1"/>
+                                <field name="face_registration_date" readonly="1"/>
+                            </group>
+                            <group string="Thao tác">
+                                <button name="action_register_face" 
+                                        type="object" 
+                                        string="Đăng ký khuôn mặt" 
+                                        class="btn-primary"
+                                        invisible="has_face_data"/>
+                                <button name="action_manage_faces" 
+                                        type="object" 
+                                        string="Quản lý ảnh khuôn mặt" 
+                                        class="btn-secondary"
+                                        invisible="not has_face_data"/>
+                            </group>
+                        </group>
+                        <group string="Danh sách ảnh khuôn mặt" invisible="not has_face_data">
+                            <field name="face_management_ids" readonly="1">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="face_image" widget="image" class="oe_avatar"/>
+                                    <field name="is_active" widget="boolean_toggle"/>
+                                    <field name="action"/>
+                                    <field name="create_date"/>
+                                    <field name="notes" optional="show"/>
+                                </tree>
+                            </field>
+                        </group>
+                        <div class="alert alert-info" role="alert">
+                            <strong>Hướng dẫn:</strong>
+                            <ul>
+                                <li>Đăng ký ảnh khuôn mặt để sử dụng hệ thống chấm công bằng nhận diện khuôn mặt.</li>
+                                <li>Có thể đăng ký nhiều ảnh cho cùng một nhân viên.</li>
+                                <li>Chỉ có một ảnh được sử dụng làm ảnh chính tại một thời điểm.</li>
+                                <li>Ảnh chính sẽ được sử dụng để xác thực khi check-in/check-out.</li>
+                            </ul>
+                        </div>
+                    </page>
+                </xpath>
+            </field>
+        </record>
+
+        <!-- Employee Tree View Inheritance for Face Status -->
+        <record id="view_employee_tree_face_status" model="ir.ui.view">
+            <field name="name">hr.employee.tree.face.status</field>
+            <field name="model">hr.employee</field>
+            <field name="inherit_id" ref="hr.view_employee_tree"/>
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='name']" position="after">
+                    <field name="has_face_data" widget="boolean_toggle"/>
+                </xpath>
+            </field>
+        </record>
+    </data>
+</odoo>
