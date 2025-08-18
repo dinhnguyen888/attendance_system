@@ -17,7 +17,7 @@ services:
   face_recognition_api:
     build: 
       context: ./custom_api_services
-      dockerfile: Dockerfile.simple
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:

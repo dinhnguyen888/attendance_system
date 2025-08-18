@@ -17,59 +17,80 @@ class AttendanceController(http.Controller):
     def attendance_webcam(self, **kw):
         return http.request.render('attendance_system.webcam_template', {})
     
-def _call_face_recognition_api(self, face_image, action, employee_id=None):
-    try:
-        url = f"{self.FACE_RECOGNITION_API_URL}/face-recognition/verify"
+    def _call_face_recognition_api(self, face_image, action, employee_id):
+        """Gọi API face recognition để xác thực khuôn mặt. Trả về dict chuẩn hóa."""
+        try:
+            url = f"{self.FACE_RECOGNITION_API_URL}/face-recognition/verify"
 
-        files = {
-            'face_image': ('face.jpg', base64.b64decode(face_image.split(',')[1] if ',' in face_image else face_image), 'image/jpeg')
-        }
-        data = {
-            'action': action,
-            'employee_id': employee_id
-        }
+            if not face_image:
+                return {"success": False, "message": "Thiếu ảnh khuôn mặt", "confidence": 0.0}
 
-        response = requests.post(url, files=files, data=data, timeout=30)
-        response.raise_for_status()
+            if not employee_id:
+                return {"success": False, "message": "Thiếu employee_id", "confidence": 0.0}
 
-        result = response.json()
-        return {
-            "success": result.get('success', False),
-            "message": result.get('message', 'Xác thực khuôn mặt thất bại'),
-            "confidence": result.get('confidence', 0.0)
-        }
+            # Chuyển base64 thành file bytes
+            face_image_data = face_image.split(',')[1] if ',' in face_image else face_image
+            try:
+                face_bytes = base64.b64decode(face_image_data)
+            except Exception:
+                return {"success": False, "message": "Ảnh khuôn mặt không hợp lệ (base64)", "confidence": 0.0}
+
+            files = {'face_image': ('face.jpg', face_bytes, 'image/jpeg')}
+            data = {'action': action, 'employee_id': str(employee_id)}
+
+            response = requests.post(url, files=files, data=data, timeout=30)
+            response.raise_for_status()
+            result = response.json()
+
+            # Chuẩn hóa trường trả về để FE luôn nhận đúng kiểu
+            success = bool(result.get('success', False))
+            message = str(result.get('message', ''))
+            confidence = float(result.get('confidence', 0.0) or 0.0)
+
+            return {"success": success, "message": message, "confidence": confidence}
+        except requests.exceptions.RequestException as e:
+            _logger.error(f"Face recognition API error: {str(e)}")
+            return {"success": False, "message": f"Lỗi kết nối API face recognition: {str(e)}", "confidence": 0.0}
+        except Exception as e:
+            _logger.error(f"Unexpected error in face recognition: {str(e)}")
+            return {"success": False, "message": f"Lỗi xử lý face recognition: {str(e)}", "confidence": 0.0}
 
     def _call_face_register_api(self, face_image, employee_id):
-        """Gọi API face recognition để đăng ký khuôn mặt"""
+        """Gọi API face recognition để đăng ký khuôn mặt. Trả về dict chuẩn hóa."""
         try:
             url = f"{self.FACE_RECOGNITION_API_URL}/face-recognition/register"
-            params = {"employee_id": employee_id}
-            payload = {
-                "face_image": face_image,
-                "action": "register",
-                "employee_id": employee_id
-            }
-            
-            response = requests.post(url, params=params, json=payload, timeout=30)
+
+            if not face_image:
+                return {"success": False, "message": "Thiếu ảnh khuôn mặt"}
+
+            if not employee_id:
+                return {"success": False, "message": "Thiếu employee_id"}
+
+            # Đăng ký dùng multipart/form-data giống verify để đồng nhất
+            face_image_data = face_image.split(',')[1] if ',' in face_image else face_image
+            try:
+                face_bytes = base64.b64decode(face_image_data)
+            except Exception:
+                return {"success": False, "message": "Ảnh khuôn mặt không hợp lệ (base64)"}
+
+            files = {'face_image': ('face.jpg', face_bytes, 'image/jpeg')}
+            data = {'action': 'register', 'employee_id': str(employee_id)}
+
+            response = requests.post(url, files=files, data=data, timeout=30)
             response.raise_for_status()
-            
             result = response.json()
-            return {
-                "success": result.get('success', False),
-                "message": result.get('message', 'Đăng ký khuôn mặt thất bại')
-            }
+
+            success = bool(result.get('success', False))
+            message = str(result.get('message', ''))
+            confidence = float(result.get('confidence', 0.0) or 0.0)
+            
+            return {"success": success, "message": message, "confidence": confidence}
         except requests.exceptions.RequestException as e:
             _logger.error(f"Face register API error: {str(e)}")
-            return {
-                "success": False,
-                "message": f"Lỗi kết nối API face register: {str(e)}"
-            }
+            return {"success": False, "message": f"Lỗi kết nối API face register: {str(e)}"}
         except Exception as e:
             _logger.error(f"Unexpected error in face register: {str(e)}")
-            return {
-                "success": False,
-                "message": f"Lỗi xử lý face register: {str(e)}"
-            }
+            return {"success": False, "message": f"Lỗi xử lý face register: {str(e)}"}
     
     @http.route('/attendance/check_in', type='json', auth='user')
     def check_in(self, **kw):
@@ -80,10 +101,6 @@ def _call_face_recognition_api(self, face_image, action, employee_id=None):
             employee = request.env.user.employee_id
             if not employee:
                 return {'error': 'Không tìm thấy nhân viên'}
-            
-            # Kiểm tra xem nhân viên đã đăng ký khuôn mặt chưa
-            if not employee.has_face_data:
-                return {'error': 'Nhân viên chưa đăng ký khuôn mặt. Vui lòng liên hệ quản trị viên.'}
             
             face_image = kw.get('face_image')
             if not face_image:
@@ -96,9 +113,8 @@ def _call_face_recognition_api(self, face_image, action, employee_id=None):
                 employee_id=employee.id
             )
             
-            # Cho phép check-in ngay cả khi confidence thấp (API đã xử lý thành công)
-            # Chỉ trả về error khi API thực sự thất bại (không decode được ảnh, không tìm thấy khuôn mặt)
-            if not face_result.get('success') and "không thể decode" in face_result.get('message', '').lower():
+            # Nếu API thất bại, trả về ngay để UI hiển thị đúng
+            if not face_result.get('success'):
                 return {'error': face_result.get('message', 'Xác thực khuôn mặt thất bại')}
             
             # Kiểm tra logic nghiệp vụ
@@ -153,10 +169,6 @@ def _call_face_recognition_api(self, face_image, action, employee_id=None):
             if not employee:
                 return {'error': 'Không tìm thấy nhân viên'}
             
-            # Kiểm tra xem nhân viên đã đăng ký khuôn mặt chưa
-            if not employee.has_face_data:
-                return {'error': 'Nhân viên chưa đăng ký khuôn mặt. Vui lòng liên hệ quản trị viên.'}
-            
             face_image = kw.get('face_image')
             if not face_image:
                 return {'error': 'Không có ảnh khuôn mặt'}
@@ -168,9 +180,8 @@ def _call_face_recognition_api(self, face_image, action, employee_id=None):
                 employee_id=employee.id
             )
             
-            # Cho phép check-out ngay cả khi confidence thấp (API đã xử lý thành công)
-            # Chỉ trả về error khi API thực sự thất bại (không decode được ảnh, không tìm thấy khuôn mặt)
-            if not face_result.get('success') and "không thể decode" in face_result.get('message', '').lower():
+            # Nếu API thất bại, trả về ngay để UI hiển thị đúng
+            if not face_result.get('success'):
                 return {'error': face_result.get('message', 'Xác thực khuôn mặt thất bại')}
             
             # Tìm bản ghi attendance hiện tại
@@ -205,7 +216,7 @@ def _call_face_recognition_api(self, face_image, action, employee_id=None):
                 'attendance_id': attendance.id,
                 'check_out_time': current_time.strftime('%H:%M:%S'),
                 'work_hours': round(work_hours, 2),
-                'confidence': face_result.get('confidence', 0.0)
+                'confidence': float(face_result.get('confidence', 0.0) or 0.0)
             }
             
         except Exception as e:
@@ -223,6 +234,21 @@ def _call_face_recognition_api(self, face_image, action, employee_id=None):
             if not employee:
                 return {'error': 'Không tìm thấy nhân viên'}
             
+            # Kiểm tra xem nhân viên đã đăng ký khuôn mặt chưa
+            has_face_data = request.env['hr.employee.face'].sudo().search([
+                ('employee_id', '=', employee.id),
+                ('is_active', '=', True)
+            ], limit=1)
+            
+            if not has_face_data:
+                return {
+                    'status': 'no_face_registered',
+                    'message': 'Nhân viên chưa đăng ký khuôn mặt',
+                    'can_check_in': False,
+                    'can_check_out': False,
+                    'need_register': True
+                }
+            
             # Kiểm tra trạng thái attendance hiện tại
             current_attendance = request.env['hr.attendance'].sudo().search([
                 ('employee_id', '=', employee.id),
@@ -233,12 +259,16 @@ def _call_face_recognition_api(self, face_image, action, employee_id=None):
                 return {
                     'status': 'checked_in',
                     'check_in_time': current_attendance.check_in.strftime('%H:%M:%S'),
-                    'can_check_out': True
+                    'can_check_in': False,
+                    'can_check_out': True,
+                    'need_register': False
                 }
             else:
                 return {
                     'status': 'checked_out',
-                    'can_check_in': True
+                    'can_check_in': True,
+                    'can_check_out': False,
+                    'need_register': False
                 }
                 
         except Exception as e:
@@ -298,7 +328,8 @@ def _call_face_recognition_api(self, face_image, action, employee_id=None):
             
             return {
                 'success': True,
-                'message': 'Đăng ký khuôn mặt thành công!'
+                'message': 'Đăng ký khuôn mặt thành công!',
+                'confidence': register_result.get('confidence', 1.0)
             }
             
         except Exception as e:
@@ -318,7 +349,11 @@ def _call_face_recognition_api(self, face_image, action, employee_id=None):
                 'success': True,
                 'status': result.get('status', 'unknown'),
                 'opencv_version': result.get('opencv_version', 'unknown'),
-                'employee_faces_count': result.get('employee_faces_count', 0)
+                'employee_faces_count': result.get('employee_faces_count', 0),
+                'insightface': result.get('insightface', False),
+                'cosine_threshold': result.get('cosine_threshold', 0.5),
+                'embedding_files': result.get('embedding_files', 0),
+                'embedding_samples': result.get('embedding_samples', 0)
             }
         except Exception as e:
             _logger.error(f"Face API health check error: {str(e)}")

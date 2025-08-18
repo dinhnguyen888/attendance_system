@@ -7,6 +7,19 @@ import base64
 import json
 from typing import Optional
 import os
+import tempfile
+import threading
+os.environ["INSIGHTFACE_USE_TORCH"] = "0"
+os.environ["ONNXRUNTIME_FORCE_CPU"] = "1"
+# InsightFace (ArcFace embeddings) for high-accuracy face comparison
+try:
+    from insightface.app import FaceAnalysis
+    _INSIGHTFACE_AVAILABLE = True
+except Exception as _e:  # pragma: no cover
+    print(f"InsightFace not available: {_e}")
+    _INSIGHTFACE_AVAILABLE = False
+
+
 
 app = FastAPI(title="Face Recognition API", version="1.0.0")
 
@@ -19,24 +32,120 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class FaceRecognitionRequest(BaseModel):
-    face_image: str
-    employee_id: Optional[int] = None
-    action: str  # "check_in" hoặc "check_out"
-
-class FaceRecognitionResponse(BaseModel):
-    success: bool
-    message: str
-    confidence: Optional[float] = None
-    employee_id: Optional[int] = None
-
 # Thư mục lưu trữ ảnh khuôn mặt của nhân viên
 EMPLOYEE_FACES_DIR = "employee_faces"
 if not os.path.exists(EMPLOYEE_FACES_DIR):
     os.makedirs(EMPLOYEE_FACES_DIR)
 
+# Path helper for stored embeddings
+def _employee_embedding_path(employee_id: int) -> str:
+    return os.path.join(EMPLOYEE_FACES_DIR, f"employee_{employee_id}.npy")
+
+# Verification threshold and storage policy
+COSINE_THRESHOLD = 0.65  # Threshold khắt khe hơn để tránh false accept
+MAX_EMBEDDINGS_PER_EMPLOYEE = 5
+
+# Lazy global model for embeddings
+_face_app = None
+_model_lock = threading.Lock()
+
+def _get_face_app() -> Optional["FaceAnalysis"]:
+    if not _INSIGHTFACE_AVAILABLE:
+        return None
+    global _face_app
+    if _face_app is None:
+        with _model_lock:
+            if _face_app is None:
+                app = FaceAnalysis(name="buffalo_l")
+                # CPU mode: ctx_id=-1
+                app.prepare(ctx_id=-1, det_size=(640, 640))
+                _face_app = app
+    return _face_app
+
+def get_face_embedding(image: np.ndarray, face_coords: Optional[tuple] = None) -> Optional[np.ndarray]:
+    """Compute a 512-dim normalized embedding using InsightFace. Returns None if unavailable/failure.
+
+    If face_coords provided, crop to ROI first to help the detector; otherwise run on full image.
+    """
+    app = _get_face_app()
+    if app is None:
+        return None
+    try:
+        roi_img = image
+        if face_coords is not None:
+            x, y, w, h = face_coords
+            roi_img = image[y:y+h, x:x+w]
+        faces = app.get(roi_img)
+        if not faces:
+            # As a fallback, try full image if we initially cropped
+            if roi_img is not image:
+                faces = app.get(image)
+                if not faces:
+                    return None
+            else:
+                return None
+        # Choose face with largest bbox
+        face_obj = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+        emb = face_obj.normed_embedding
+        if emb is None:
+            return None
+        emb = np.asarray(emb, dtype=np.float32)
+        # Ensure L2 normalization
+        norm = np.linalg.norm(emb)
+        if norm > 0:
+            emb = emb / norm
+        return emb
+    except Exception as e:
+        print(f"Error computing embedding: {str(e)}")
+        return None
+
+def save_employee_embedding(employee_id: int, embedding: np.ndarray) -> None:
+    try:
+        path = _employee_embedding_path(employee_id)
+        stacked: Optional[np.ndarray] = None
+        if os.path.exists(path):
+            try:
+                existing = np.load(path)
+                if existing.ndim == 1 and existing.shape[0] == embedding.shape[0]:
+                    stacked = np.stack([existing, embedding], axis=0)
+                elif existing.ndim == 2 and existing.shape[1] == embedding.shape[0]:
+                    stacked = np.vstack([existing, embedding[None, :]])
+                else:
+                    stacked = embedding[None, :]
+            except Exception as _e:
+                print(f"Không đọc được embeddings cũ cho employee {employee_id}: {_e}")
+                stacked = embedding[None, :]
+        else:
+            stacked = embedding[None, :]
+
+        # Giữ tối đa N embedding gần nhất
+        if stacked.shape[0] > MAX_EMBEDDINGS_PER_EMPLOYEE:
+            stacked = stacked[-MAX_EMBEDDINGS_PER_EMPLOYEE:, :]
+
+        np.save(path, stacked)
+    except Exception as e:
+        print(f"Lỗi khi lưu embedding cho employee {employee_id}: {str(e)}")
+
+def load_employee_embeddings(employee_id: int) -> Optional[np.ndarray]:
+    try:
+        path = _employee_embedding_path(employee_id)
+        if not os.path.exists(path):
+            return None
+        emb = np.load(path)
+        # Ensure 2D array (num_samples, 512)
+        if emb.ndim == 1:
+            emb = emb[None, :]
+        # Normalize rows
+        norms = np.linalg.norm(emb, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        emb = (emb / norms).astype(np.float32)
+        return emb
+    except Exception as e:
+        print(f"Lỗi khi tải embeddings cho employee {employee_id}: {str(e)}")
+        return None
+
 def process_uploaded_image(file: UploadFile) -> np.ndarray:
-    """Xử lý ảnh được upload trực tiếp - đơn giản hóa"""
+    """Xử lý ảnh được upload trực tiếp"""
     try:
         # Đọc nội dung file
         image_bytes = file.file.read()
@@ -60,7 +169,7 @@ def process_uploaded_image(file: UploadFile) -> np.ndarray:
         raise ValueError(f"Lỗi xử lý ảnh upload: {str(e)}")
 
 def detect_faces(image: np.ndarray) -> list:
-    """Phát hiện khuôn mặt trong ảnh - đơn giản hóa"""
+    """Phát hiện khuôn mặt trong ảnh"""
     try:
         # Kiểm tra ảnh cơ bản
         if image is None:
@@ -84,7 +193,7 @@ def detect_faces(image: np.ndarray) -> list:
         raise
 
 def extract_face_features(image: np.ndarray, face_coords: tuple) -> np.ndarray:
-    """Trích xuất đặc trưng khuôn mặt - đơn giản hóa"""
+    """Trích xuất đặc trưng khuôn mặt"""
     try:
         # Lấy tọa độ
         x, y, w, h = face_coords
@@ -130,157 +239,154 @@ def load_employee_face(employee_id: int) -> Optional[np.ndarray]:
     return None
 
 def compare_faces(face1: np.ndarray, face2: np.ndarray) -> float:
-    """So sánh hai khuôn mặt và trả về độ tương đồng - cải thiện"""
+    """So sánh hai khuôn mặt và trả về độ tương đồng (cosine similarity)."""
     try:
-        # Chuyển về grayscale
+        # Try embeddings if possible
+        emb1 = get_face_embedding(face1)
+        emb2 = get_face_embedding(face2)
+        if emb1 is not None and emb2 is not None:
+            similarity = float(np.dot(emb1, emb2))  # cosine similarity in [-1, 1]
+            print(f"Embedding cosine similarity: {similarity:.3f}")
+            return similarity
+
+        # Fallback: ORB + FLANN
         gray1 = cv2.cvtColor(face1, cv2.COLOR_BGR2GRAY)
         gray2 = cv2.cvtColor(face2, cv2.COLOR_BGR2GRAY)
-        
-        # Sử dụng ORB để trích xuất đặc trưng
-        orb = cv2.ORB_create(nfeatures=1000)
+
+        orb = cv2.ORB_create(nfeatures=5000)
         kp1, des1 = orb.detectAndCompute(gray1, None)
         kp2, des2 = orb.detectAndCompute(gray2, None)
-        
-        if des1 is None or des2 is None:
-            print("No descriptors found")
-            return 0.0
-        
-        print(f"Keypoints: {len(kp1)} vs {len(kp2)}")
-        
-        # Sử dụng BFMatcher để so sánh
-        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-        matches = bf.match(des1, des2)
-        
-        # Lọc matches tốt
-        good_matches = [m for m in matches if m.distance < 50]
-        
-        # Tính độ tương đồng
-        if len(kp1) > 0 and len(kp2) > 0:
-            similarity = len(good_matches) / min(len(kp1), len(kp2))
-        else:
-            similarity = 0.0
-            
-        print(f"Total matches: {len(matches)}, Good matches: {len(good_matches)}, Similarity: {similarity:.3f}")
+
+        if des1 is None or des2 is None or len(kp1) == 0 or len(kp2) == 0:
+            print("Không tìm thấy đặc trưng để so sánh")
+            return -1.0
+
+        index_params = dict(algorithm=6, table_number=6, key_size=12, multi_probe_level=1)
+        search_params = dict(checks=50)
+        flann = cv2.FlannBasedMatcher(index_params, search_params)
+        matches = flann.knnMatch(des1, des2, k=2)
+
+        good_matches = []
+        for m, n in matches:
+            if m.distance < 0.75 * n.distance:
+                good_matches.append(m)
+
+        # Map ORB similarity to cosine scale [-1, 1]
+        orb_similarity = len(good_matches) / min(len(kp1), len(kp2))
+        similarity = 2.0 * orb_similarity - 1.0
+        print(f"ORB matches: {len(matches)}, Good: {len(good_matches)}, Mapped similarity: {similarity:.3f}")
         return similarity
-        
+
     except Exception as e:
         print(f"Error in compare_faces: {str(e)}")
-        return 0.0
+        return -1.0
 
-@app.post("/face-recognition/verify", response_model=FaceRecognitionResponse)
-async def verify_face(request: FaceRecognitionRequest):
-    """Xác thực khuôn mặt cho check-in/check-out - đơn giản hóa"""
+@app.post("/face-recognition/verify")
+async def verify_face(
+    face_image: UploadFile = File(...),
+    action: str = Form(...),
+    employee_id: int = Form(...)
+):
+    """Xác thực khuôn mặt cho check-in/check-out"""
     try:
-        print(f"Processing verification for employee {request.employee_id}, action: {request.action}")
+        print(f"Processing verification for employee {employee_id}, action: {action}")
         
-        # Decode ảnh từ base64 - xử lý data URL prefix
-        face_image_data = request.face_image
-        if ',' in face_image_data:
-            face_image_data = face_image_data.split(',')[1]
-        
-        try:
-            image_bytes = base64.b64decode(face_image_data)
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        except Exception as decode_error:
-            print(f"Base64 decode error: {str(decode_error)}")
-            return FaceRecognitionResponse(
-                success=False,
-                message=f"Lỗi decode ảnh: {str(decode_error)}"
-            )
-        
-        if image is None:
-            return FaceRecognitionResponse(
-                success=False,
-                message="Không thể decode ảnh"
-            )
+        # Xử lý ảnh upload
+        image = process_uploaded_image(face_image)
         
         # Phát hiện khuôn mặt
         faces = detect_faces(image)
         
         if len(faces) == 0:
-            return FaceRecognitionResponse(
-                success=False,
-                message="Không tìm thấy khuôn mặt trong ảnh"
-            )
+            return {
+                "success": False,
+                "message": "Không tìm thấy khuôn mặt trong ảnh",
+                "confidence": 0.0,
+                "employee_id": employee_id
+            }
         
         if len(faces) > 1:
-            return FaceRecognitionResponse(
-                success=False,
-                message="Phát hiện nhiều khuôn mặt. Vui lòng chụp ảnh chỉ có một khuôn mặt"
-            )
+            return {
+                "success": False,
+                "message": "Phát hiện nhiều khuôn mặt. Vui lòng chụp ảnh chỉ có một khuôn mặt",
+                "confidence": 0.0,
+                "employee_id": employee_id
+            }
         
         # Trích xuất khuôn mặt
         face_coords = faces[0]
-        current_face = extract_face_features(image, face_coords)
+        current_embedding = get_face_embedding(image, face_coords)
         
-        if request.action == "check_in":
-            # Lưu ảnh khuôn mặt cho nhân viên (nếu có employee_id)
-            if request.employee_id:
-                save_employee_face(request.employee_id, current_face)
-                return FaceRecognitionResponse(
-                    success=True,
-                    message="Check-in thành công",
-                    confidence=1.0,
-                    employee_id=request.employee_id
-                )
-            else:
-                return FaceRecognitionResponse(
-                    success=True,
-                    message="Check-in thành công",
-                    confidence=1.0
-                )
+        if current_embedding is None:
+            return {
+                "success": False,
+                "message": "Không thể trích xuất embedding từ ảnh",
+                "confidence": 0.0,
+                "employee_id": employee_id
+            }
         
-        elif request.action == "check_out":
-            # So sánh với ảnh đã lưu (nếu có employee_id)
-            if request.employee_id:
-                stored_face = load_employee_face(request.employee_id)
-                if stored_face is not None:
-                    confidence = compare_faces(current_face, stored_face)
-                    print(f"Face comparison confidence: {confidence}")
-                    
-                    # Giảm ngưỡng xuống 0.3 để dễ pass hơn
-                    if confidence > 0.3:  # Ngưỡng tương đồng thấp hơn
-                        return FaceRecognitionResponse(
-                            success=True,
-                            message="Check-out thành công",
-                            confidence=confidence,
-                            employee_id=request.employee_id
-                        )
-                    else:
-                        return FaceRecognitionResponse(
-                            success=False,
-                            message=f"Khuôn mặt không khớp với nhân viên (confidence: {confidence:.3f})",
-                            confidence=confidence
-                        )
-                else:
-                    # Không có ảnh lưu trữ, cho phép check-out
-                    print("No stored face found, allowing check-out")
-                    return FaceRecognitionResponse(
-                        success=True,
-                        message="Check-out thành công (không có ảnh lưu trữ)",
-                        confidence=1.0,
-                        employee_id=request.employee_id
-                    )
-            else:
-                return FaceRecognitionResponse(
-                    success=True,
-                    message="Check-out thành công",
-                    confidence=1.0
-                )
+        # Kiểm tra xem nhân viên đã đăng ký chưa
+        stored_embeddings = load_employee_embeddings(employee_id)
         
+        if stored_embeddings is None:
+            # Nếu chưa có embedding, thử lấy ảnh khuôn mặt đã đăng ký và tạo embedding từ đó
+            registered_face = load_employee_face(employee_id)
+            if registered_face is not None:
+                # Thử trích xuất embedding trực tiếp
+                registered_embedding = get_face_embedding(registered_face)
+                # Nếu thất bại, thử lại với bbox phủ toàn ảnh đã cắt
+                if registered_embedding is None:
+                    try:
+                        h, w = registered_face.shape[:2]
+                        registered_embedding = get_face_embedding(registered_face, (0, 0, w, h))
+                    except Exception:
+                        registered_embedding = None
+                if registered_embedding is not None:
+                    # Lưu embedding lần đầu
+                    save_employee_embedding(employee_id, registered_embedding)
+                    stored_embeddings = load_employee_embeddings(employee_id)
+            # Nếu vẫn không tạo được từ ảnh đăng ký, khởi tạo bằng embedding hiện tại
+            if stored_embeddings is None and current_embedding is not None:
+                save_employee_embedding(employee_id, current_embedding)
+                stored_embeddings = load_employee_embeddings(employee_id)
+            if stored_embeddings is None:
+                return {
+                    "success": False,
+                    "message": "Nhân viên chưa đăng ký khuôn mặt. Vui lòng đăng ký trước",
+                    "confidence": 0.0,
+                    "employee_id": employee_id
+                }
+        
+        # Tính cosine similarity với tất cả embeddings đã lưu
+        sims = stored_embeddings @ current_embedding
+        max_sim = float(np.max(sims))
+        avg_sim = float(np.mean(sims))
+        
+        print(f"Face verification — avg: {avg_sim:.3f}, max: {max_sim:.3f}, samples: {stored_embeddings.shape[0]}")
+        
+        if max_sim >= COSINE_THRESHOLD:
+            return {
+                "success": True,
+                "message": f"{action.capitalize()} thành công",
+                "confidence": max_sim,
+                "employee_id": employee_id
+            }
         else:
-            return FaceRecognitionResponse(
-                success=False,
-                message="Hành động không hợp lệ"
-            )
+            return {
+                "success": False,
+                "message": f"Khuôn mặt không khớp với nhân viên (max cosine: {max_sim:.3f})",
+                "confidence": max_sim,
+                "employee_id": employee_id
+            }
             
     except Exception as e:
         print(f"Error in verify_face: {str(e)}")
-        return FaceRecognitionResponse(
-            success=False,
-            message=f"Lỗi xử lý: {str(e)}"
-        )
+        return {
+            "success": False,
+            "message": f"Lỗi xử lý: {str(e)}",
+            "confidence": 0.0,
+            "employee_id": employee_id
+        }
 
 @app.get("/")
 def read_root():
@@ -296,7 +402,9 @@ async def register_employee_face(
     action: str = Form(...),
     face_image: UploadFile = File(...)
 ):
-    """Đăng ký ảnh khuôn mặt cho nhân viên mới - đơn giản hóa"""
+    print(f"Processing registration for employee {employee_id}, action: {action}")
+    
+    """Đăng ký ảnh khuôn mặt cho nhân viên mới"""
     try:
         print(f"Processing registration for employee {employee_id}, action: {action}")
         
@@ -322,20 +430,35 @@ async def register_employee_face(
         face_coords = faces[0]
         face_roi = extract_face_features(image, face_coords)
         
-        # Lưu ảnh
+        # Lưu ảnh khuôn mặt, KHÔNG lưu embedding ở bước đăng ký
         save_employee_face(employee_id, face_roi)
+        
+        # Thử tạo và lưu embedding luôn để lần xác thực đầu tiên không bị thiếu
+        try:
+            initial_embedding = get_face_embedding(image, face_coords)
+            if initial_embedding is None:
+                # Thử lại với toàn bộ ảnh đã cắt (ROI 128x128)
+                h, w = face_roi.shape[:2]
+                initial_embedding = get_face_embedding(face_roi, (0, 0, w, h))
+            if initial_embedding is not None:
+                save_employee_embedding(employee_id, initial_embedding)
+        except Exception as _e:
+            print(f"Không thể tạo embedding khi đăng ký cho employee {employee_id}: {_e}")
         
         return {
             "success": True, 
             "message": f"Đăng ký khuôn mặt thành công cho nhân viên {employee_id}",
-            "employee_id": employee_id
+            "employee_id": employee_id,
+            "confidence": 1.0
         }
         
     except Exception as e:
         print(f"Error in register_employee_face: {str(e)}")
         return {
             "success": False,
-            "message": f"Lỗi xử lý: {str(e)}"
+            "message": f"Lỗi xử lý: {str(e)}",
+            "confidence": 0.0,
+            "employee_id": None
         }
 
 @app.get("/face-recognition/health")
@@ -343,17 +466,88 @@ async def health_check():
     """Kiểm tra trạng thái API"""
     try:
         count = len([f for f in os.listdir(EMPLOYEE_FACES_DIR) if f.endswith('.jpg')])
-        return {
+        status = {
             "status": "healthy",
             "opencv_version": cv2.__version__,
-            "employee_faces_count": count
+            "employee_faces_count": count,
+            "insightface": _INSIGHTFACE_AVAILABLE,
+            "cosine_threshold": COSINE_THRESHOLD
         }
+        try:
+            if _INSIGHTFACE_AVAILABLE and _get_face_app() is not None:
+                status["embedding_model"] = "buffalo_l"
+            # Count embedding files and total samples
+            emb_files = [f for f in os.listdir(EMPLOYEE_FACES_DIR) if f.endswith('.npy')]
+            total_samples = 0
+            for f in emb_files:
+                try:
+                    arr = np.load(os.path.join(EMPLOYEE_FACES_DIR, f))
+                    if arr.ndim == 1:
+                        total_samples += 1
+                    elif arr.ndim == 2:
+                        total_samples += int(arr.shape[0])
+                except Exception:
+                    pass
+            status["embedding_files"] = len(emb_files)
+            status["embedding_samples"] = total_samples
+        except Exception:
+            pass
+        return status
     except:
         return {
             "status": "healthy",
             "opencv_version": cv2.__version__,
             "employee_faces_count": 0
         }
+
+@app.post("/face-recognition/backfill-embeddings")
+async def backfill_embeddings():
+    """Tạo embeddings từ các ảnh đã đăng ký sẵn trong thư mục employee_faces."""
+    processed = 0
+    created = 0
+    failed = []
+    try:
+        files = [f for f in os.listdir(EMPLOYEE_FACES_DIR) if f.endswith('.jpg')]
+        for f in files:
+            try:
+                if not f.startswith('employee_'):
+                    continue
+                employee_id_str = f[len('employee_'):-len('.jpg')]
+                employee_id = int(employee_id_str)
+                # Bỏ qua nếu đã có embedding
+                emb_path = _employee_embedding_path(employee_id)
+                if os.path.exists(emb_path):
+                    processed += 1
+                    continue
+                img = cv2.imread(os.path.join(EMPLOYEE_FACES_DIR, f))
+                if img is None:
+                    failed.append({"file": f, "reason": "cannot read"})
+                    continue
+                faces = detect_faces(img)
+                emb = None
+                if len(faces) > 0:
+                    emb = get_face_embedding(img, faces[0])
+                if emb is None:
+                    # Thử toàn bộ ảnh
+                    h, w = img.shape[:2]
+                    emb = get_face_embedding(img, (0, 0, w, h))
+                if emb is None:
+                    failed.append({"file": f, "reason": "no embedding"})
+                    continue
+                save_employee_embedding(employee_id, emb)
+                created += 1
+                processed += 1
+            except Exception as e:
+                failed.append({"file": f, "reason": str(e)})
+        return {
+            "success": True,
+            "processed": processed,
+            "created": created,
+            "failed": failed,
+            "embedding_files": len([x for x in os.listdir(EMPLOYEE_FACES_DIR) if x.endswith('.npy')])
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

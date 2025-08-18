@@ -114,25 +114,18 @@ class HrEmployeeFace(models.Model):
                 import requests
                 import base64
                 
-                # Chuyển đổi ảnh thành base64
                 if record.face_image:
-                    image_data = base64.b64encode(record.face_image).decode('utf-8')
-                    
-                    # Gọi API register
+                    # Odoo binary fields are base64-encoded; decode to raw bytes for multipart
+                    face_bytes = base64.b64decode(record.face_image)
                     api_url = "http://face_recognition_api:8000/face-recognition/register"
-                    payload = {
-                        "face_image": image_data,
-                        "action": "register",
-                        "employee_id": record.employee_id.id
+                    files = {
+                        'face_image': ('face.jpg', face_bytes, 'image/jpeg')
                     }
-                    
-                    response = requests.post(
-                        api_url, 
-                        params={"employee_id": record.employee_id.id},
-                        json=payload,
-                        timeout=30
-                    )
-                    
+                    data = {
+                        'action': 'register',
+                        'employee_id': str(record.employee_id.id)
+                    }
+                    response = requests.post(api_url, files=files, data=data, timeout=30)
                     if response.status_code == 200:
                         _logger.info(f"API register face thành công cho employee {record.employee_id.id}")
                     else:
@@ -161,24 +154,16 @@ class HrEmployeeFace(models.Model):
                             import requests
                             import base64
                             
-                            # Chuyển đổi ảnh thành base64
-                            image_data = base64.b64encode(record.face_image).decode('utf-8')
-                            
-                            # Gọi API register
+                            face_bytes = base64.b64decode(record.face_image)
                             api_url = "http://face_recognition_api:8000/face-recognition/register"
-                            payload = {
-                                "face_image": image_data,
-                                "action": "register",
-                                "employee_id": record.employee_id.id
+                            files = {
+                                'face_image': ('face.jpg', face_bytes, 'image/jpeg')
                             }
-                            
-                            response = requests.post(
-                                api_url, 
-                                params={"employee_id": record.employee_id.id},
-                                json=payload,
-                                timeout=30
-                            )
-                            
+                            data = {
+                                'action': 'register',
+                                'employee_id': str(record.employee_id.id)
+                            }
+                            response = requests.post(api_url, files=files, data=data, timeout=30)
                             if response.status_code == 200:
                                 _logger.info(f"API register face thành công cho employee {record.employee_id.id}")
                             else:
