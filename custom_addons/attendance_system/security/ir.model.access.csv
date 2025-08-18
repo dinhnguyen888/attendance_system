@@ -1,2 +1,4 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_hr_attendance_face,access.hr.attendance.face,hr_attendance.model_hr_attendance,base.group_user,1,1,1,1
+access_hr_employee_face,access.hr.employee.face,attendance_system.model_hr_employee_face,hr.group_hr_user,1,1,1,1
+access_hr_employee_face_manager,access.hr.employee.face.manager,attendance_system.model_hr_employee_face,hr.group_hr_manager,1,1,1,1

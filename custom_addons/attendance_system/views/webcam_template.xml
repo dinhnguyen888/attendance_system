@@ -456,6 +456,61 @@
                     }
                     
                     initializeCamera();
+
+                    // Pre-check: API health and employee status to avoid confusing UI states
+                    function preflightChecks() {
+                        // Check Face API health (InsightFace availability)
+                        fetch('/attendance/face_api_health', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            body: JSON.stringify({ jsonrpc: '2.0', method: 'call', params: {} })
+                        })
+                        .then(r => r.json())
+                        .then(d => {
+                            const res = d.result;
+                            if (!res || !res.success) {
+                                showResult('Face API is not reachable. Please contact admin.', 'error');
+                                checkInBtn.disabled = true;
+                                checkOutBtn.disabled = true;
+                                return;
+                            }
+                            if (res.insightface === false) {
+                                showResult('Face engine is not ready (embeddings unavailable). Please contact admin.', 'error');
+                                checkInBtn.disabled = true;
+                                checkOutBtn.disabled = true;
+                            }
+                        })
+                        .catch(() => {
+                            showResult('Cannot reach Face API. Please try again later.', 'error');
+                            checkInBtn.disabled = true;
+                            checkOutBtn.disabled = true;
+                        });
+
+                        // Check employee attendance/registration status
+                        fetch('/attendance/status', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            body: JSON.stringify({ jsonrpc: '2.0', method: 'call', params: {} })
+                        })
+                        .then(r => r.json())
+                        .then(d => {
+                            const res = d.result || {};
+                            if (res.status === 'no_face_registered') {
+                                showResult('You have not registered a face yet. Please register before check-in/out.', 'error');
+                                checkInBtn.disabled = true;
+                                checkOutBtn.disabled = true;
+                            }
+                        })
+                        .catch(() => { /* ignore */ });
+                    }
+
+                    preflightChecks();
                     
                     // Handle window resize
                     window.addEventListener('resize', function() {
@@ -516,14 +571,20 @@
                         })
                         .then(response => response.json())
                         .then(data => {
-                            const result = data.result;
+                            // Robustly parse Odoo JSON-RPC response
+                            if (data && data.error) {
+                                const srvErr = data.error.message || (data.error.data && data.error.data.message) || 'Request failed';
+                                showResult('❌ Check-in failed: ' + srvErr, 'error');
+                                return;
+                            }
+                            const result = data && data.result ? data.result : null;
                             if (result && result.success) {
-                                showResult('✅ Check-in successful!', 'success');
-                                setTimeout(() => {
-                                    resetCamera();
-                                }, 2000);
+                                const conf = typeof result.confidence === 'number' ? ` (confidence: ${result.confidence.toFixed(2)})` : '';
+                                showResult('✅ Check-in successful' + conf + '!', 'success');
+                                imageData = null;
+                                setTimeout(() => { resetCamera(); }, 2000);
                             } else {
-                                const errorMsg = result ? result.error : 'Unknown error occurred';
+                                const errorMsg = (result && result.error) ? result.error : (result && result.message ? result.message : 'Unknown error occurred');
                                 showResult('❌ Check-in failed: ' + errorMsg, 'error');
                             }
                         })
@@ -556,14 +617,19 @@
                         })
                         .then(response => response.json())
                         .then(data => {
-                            const result = data.result;
+                            if (data && data.error) {
+                                const srvErr = data.error.message || (data.error.data && data.error.data.message) || 'Request failed';
+                                showResult('❌ Check-out failed: ' + srvErr, 'error');
+                                return;
+                            }
+                            const result = data && data.result ? data.result : null;
                             if (result && result.success) {
-                                showResult('✅ Check-out successful!', 'success');
-                                setTimeout(() => {
-                                    resetCamera();
-                                }, 2000);
+                                const conf = typeof result.confidence === 'number' ? ` (confidence: ${result.confidence.toFixed(2)})` : '';
+                                showResult('✅ Check-out successful' + conf + '!', 'success');
+                                imageData = null;
+                                setTimeout(() => { resetCamera(); }, 2000);
                             } else {
-                                const errorMsg = result ? result.error : 'Unknown error occurred';
+                                const errorMsg = (result && result.error) ? result.error : (result && result.message ? result.message : 'Unknown error occurred');
                                 showResult('❌ Check-out failed: ' + errorMsg, 'error');
                             }
                         })

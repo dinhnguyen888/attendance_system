@@ -1,34 +1,53 @@
-version: "3.1"
+version: '3.8'
 
 services:
-    db:
-        image: postgres:15
-        environment:
-            - POSTGRES_DB=postgres
-            - POSTGRES_USER=odoo
-            - POSTGRES_PASSWORD=odoo
-        volumes:
-            - odoo-db:/var/lib/postgresql/data
+  # PostgreSQL Database
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: odoo
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
 
-    odoo:
-        image: odoo:17
-        depends_on:
-            - db
-        ports:
-            - "8069:8069"
-        environment:
-            - HOST=db
-            - USER=admin
-            - PASSWORD=admin
-        volumes:
-            - ./custom_addons:/mnt/extra-addons
-            - ./odoo.conf:/etc/odoo/odoo.conf
+  # Face Recognition API Service
+  face_recognition_api:
+    build: 
+      context: ./custom_api_services
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./custom_api_services:/app
+      - employee_faces_data:/app/employee_faces
+    environment:
+      - PYTHONPATH=/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - postgres
 
-    custom_api_service:
-        build:
-            context: ./custom_api_services
-        ports:
-            - "8000:8000"
+  # Odoo Application
+  odoo:
+    image: odoo:17.0
+    depends_on:
+      - postgres
+      - face_recognition_api
+    ports:
+      - "8069:8069"
+    volumes:
+      - ./custom_addons:/mnt/extra-addons
+      - ./odoo.conf:/etc/odoo/odoo.conf
+      - odoo_data:/var/lib/odoo
+    environment:
+      - HOST=postgres
+      - USER=odoo
+      - PASSWORD=odoo
+    command: -- --config=/etc/odoo/odoo.conf
 
 volumes:
-    odoo-db:
+  postgres_data:
+  odoo_data:
+  employee_faces_data:

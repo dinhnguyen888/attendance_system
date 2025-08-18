@@ -1,36 +1,37 @@
 <odoo>
+    <!-- Form View for Attendance with Face Image -->
     <record id="view_hr_attendance_form_inherit_face" model="ir.ui.view">
         <field name="name">hr.attendance.form.inherit.face</field>
         <field name="model">hr.attendance</field>
         <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='employee_id']" position="after">
-                <field name="face_image" widget="image"/>
+                <field name="face_image" widget="image" class="oe_avatar" readonly="1"/>
+            </xpath>
+            <xpath expr="//field[@name='worked_hours']" position="after">
+                <field name="verification_confidence" widget="percentage" readonly="1"/>
+                <field name="verification_message" readonly="1"/>
             </xpath>
         </field>
     </record>
 
-     <record id="view_hr_attendance_tree_no_create" model="ir.ui.view">
-        <field name="name">hr.attendance.tree.no.create</field>
+    <!-- Tree View for Attendance with Face Image -->
+    <record id="view_hr_attendance_tree_inherit_face" model="ir.ui.view">
+        <field name="name">hr.attendance.tree.inherit.face</field>
         <field name="model">hr.attendance</field>
         <field name="inherit_id" ref="hr_attendance.view_attendance_tree"/>
         <field name="arch" type="xml">
-            <xpath expr="//tree" position="attributes">
-                <attribute name="create">false</attribute>
+            <xpath expr="//field[@name='employee_id']" position="after">
+                <field name="face_image" widget="image" class="oe_avatar" optional="show"/>
+            </xpath>
+            <xpath expr="//field[@name='worked_hours']" position="after">
+                <field name="verification_confidence" widget="percentage" optional="show"/>
+                <field name="verification_message" optional="hide"/>
             </xpath>
         </field>
     </record>
-    <record id="view_hr_attendance_form_no_create" model="ir.ui.view">
-    <field name="name">hr.attendance.form.no.create</field>
-    <field name="model">hr.attendance</field>
-    <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
-    <field name="arch" type="xml">
-        <xpath expr="//form" position="attributes">
-            <attribute name="create">false</attribute>
-        </xpath>
-    </field>
-</record>
 
+    <!-- Action for Webcam Attendance -->
     <record id="action_webcam_attendance" model="ir.actions.server">
         <field name="name">Face Attendance</field>
         <field name="model_id" ref="hr_attendance.model_hr_attendance"/>
@@ -38,7 +39,7 @@
         <field name="code">action = {'type': 'ir.actions.act_url', 'url': '/attendance/webcam', 'target': 'self'}</field>
     </record>
     
-
+    <!-- Menu for Face Attendance -->
     <menuitem id="menu_webcam_attendance"
               name="Face Attendance"
               parent="hr_attendance.menu_hr_attendance_root"
