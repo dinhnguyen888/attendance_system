@@ -5,10 +5,11 @@ import cv2
 import numpy as np
 import base64
 import json
-from typing import Optional
+from typing import Optional, Tuple
 import os
 import tempfile
 import threading
+import math
 os.environ["INSIGHTFACE_USE_TORCH"] = "0"
 os.environ["ONNXRUNTIME_FORCE_CPU"] = "1"
 # InsightFace (ArcFace embeddings) for high-accuracy face comparison
@@ -238,6 +239,102 @@ def load_employee_face(employee_id: int) -> Optional[np.ndarray]:
         return cv2.imread(face_path)
     return None
 
+def validate_image_aspect_ratio(image: np.ndarray) -> Tuple[bool, str]:
+    """Kiểm tra tỉ lệ khung hình của ảnh (3:4 hoặc 4:6)"""
+    try:
+        height, width = image.shape[:2]
+        
+        # Tính tỉ lệ khung hình
+        aspect_ratio = width / height
+        
+        # Kiểm tra tỉ lệ 3:4 (0.75) với độ dung sai 5%
+        ratio_3_4 = 3.0 / 4.0
+        tolerance = 0.05
+        
+        if abs(aspect_ratio - ratio_3_4) <= tolerance:
+            return True, "3:4"
+        
+        # Kiểm tra tỉ lệ 4:6 (2:3 = 0.667) với độ dung sai 5%
+        ratio_4_6 = 4.0 / 6.0  # = 2/3
+        
+        if abs(aspect_ratio - ratio_4_6) <= tolerance:
+            return True, "4:6"
+        
+        return False, f"Tỉ lệ hiện tại: {aspect_ratio:.3f}. Yêu cầu tỉ lệ 3:4 (0.75) hoặc 4:6 (0.667)"
+        
+    except Exception as e:
+        return False, f"Lỗi kiểm tra tỉ lệ khung hình: {str(e)}"
+
+def validate_background_color(image: np.ndarray) -> Tuple[bool, str]:
+    """Kiểm tra màu nền của ảnh (trắng hoặc xanh)"""
+    try:
+        # Lấy các pixel ở viền ảnh để xác định màu nền
+        height, width = image.shape[:2]
+        
+        # Lấy pixel từ 4 cạnh của ảnh
+        border_pixels = []
+        
+        # Cạnh trên và dưới
+        border_pixels.extend(image[0, :].reshape(-1, 3))
+        border_pixels.extend(image[height-1, :].reshape(-1, 3))
+        
+        # Cạnh trái và phải
+        border_pixels.extend(image[:, 0].reshape(-1, 3))
+        border_pixels.extend(image[:, width-1].reshape(-1, 3))
+        
+        border_pixels = np.array(border_pixels)
+        
+        # Tính màu trung bình của viền
+        avg_color = np.mean(border_pixels, axis=0)
+        
+        # Chuyển từ BGR sang RGB để dễ hiểu
+        avg_color_rgb = avg_color[::-1]  # BGR to RGB
+        
+        # Định nghĩa màu trắng và xanh dương trong RGB
+        white_rgb = np.array([255, 255, 255])
+        blue_rgb = np.array([0, 0, 255])  # Xanh dương thuần
+        light_blue_rgb = np.array([173, 216, 230])  # Xanh nhạt
+        
+        # Tính khoảng cách Euclidean
+        dist_to_white = np.linalg.norm(avg_color_rgb - white_rgb)
+        dist_to_blue = np.linalg.norm(avg_color_rgb - blue_rgb)
+        dist_to_light_blue = np.linalg.norm(avg_color_rgb - light_blue_rgb)
+        
+        # Ngưỡng chấp nhận (có thể điều chỉnh)
+        white_threshold = 50  # Cho phép sai lệch 50 đơn vị
+        blue_threshold = 150   # Cho phép sai lệch 80 đơn vị cho màu xanh
+        
+        if dist_to_white <= white_threshold:
+            return True, "Nền trắng"
+        elif dist_to_blue <= blue_threshold or dist_to_light_blue <= blue_threshold:
+            return True, "Nền xanh"
+        else:
+            return False, f"Màu nền không hợp lệ. Màu trung bình: RGB({avg_color_rgb[0]:.0f}, {avg_color_rgb[1]:.0f}, {avg_color_rgb[2]:.0f}). Yêu cầu nền trắng hoặc xanh."
+            
+    except Exception as e:
+        return False, f"Lỗi kiểm tra màu nền: {str(e)}"
+
+def scale_image_to_standard(image: np.ndarray, target_width: int = 480) -> np.ndarray:
+    """Scale ảnh về kích thước chuẩn để tối ưu cho việc phát hiện khuôn mặt"""
+    try:
+        height, width = image.shape[:2]
+        
+        # Tính tỉ lệ scale dựa trên chiều rộng mục tiêu
+        scale_ratio = target_width / width
+        
+        # Tính chiều cao mới để giữ nguyên tỉ lệ khung hình
+        target_height = int(height * scale_ratio)
+        
+        # Resize ảnh
+        scaled_image = cv2.resize(image, (target_width, target_height), interpolation=cv2.INTER_AREA)
+        
+        print(f"Scaled image from {width}x{height} to {target_width}x{target_height}")
+        return scaled_image
+        
+    except Exception as e:
+        print(f"Lỗi khi scale ảnh: {str(e)}")
+        return image  # Trả về ảnh gốc nếu có lỗi
+
 def compare_faces(face1: np.ndarray, face2: np.ndarray) -> float:
     """So sánh hai khuôn mặt và trả về độ tương đồng (cosine similarity)."""
     try:
@@ -411,6 +508,27 @@ async def register_employee_face(
         # Xử lý ảnh upload
         image = process_uploaded_image(face_image)
         
+        # Kiểm tra tỉ lệ khung hình
+        aspect_valid, aspect_msg = validate_image_aspect_ratio(image)
+        if not aspect_valid:
+            return {
+                "success": False,
+                "message": f"Tỉ lệ khung hình không hợp lệ: {aspect_msg}"
+            }
+        
+        # Kiểm tra màu nền
+        bg_valid, bg_msg = validate_background_color(image)
+        if not bg_valid:
+            return {
+                "success": False,
+                "message": f"Màu nền không hợp lệ: {bg_msg}"
+            }
+        
+        print(f"Image validation passed: {aspect_msg}, {bg_msg}")
+        
+        # Scale ảnh về kích thước chuẩn để tối ưu phát hiện khuôn mặt
+        image = scale_image_to_standard(image)
+        
         # Phát hiện khuôn mặt
         faces = detect_faces(image)
         
@@ -423,7 +541,8 @@ async def register_employee_face(
         if len(faces) > 1:
             return {
                 "success": False,
-                "message": "Phát hiện nhiều khuôn mặt. Vui lòng chụp ảnh chỉ có một khuôn mặt"
+                "message": "Phát hiện nhiều khuôn mặt. Vui lòng chụp ảnh chỉ có một khuôn mặt",
+                "confidence": 0.0
             }
         
         # Trích xuất khuôn mặt
@@ -459,6 +578,63 @@ async def register_employee_face(
             "message": f"Lỗi xử lý: {str(e)}",
             "confidence": 0.0,
             "employee_id": None
+        }
+
+@app.delete("/face-recognition/employee/{employee_id}")
+async def delete_employee_face(employee_id: int):
+    """Xóa ảnh khuôn mặt và embedding của nhân viên"""
+    try:
+        deleted_files = []
+        errors = []
+        
+        # Xóa ảnh khuôn mặt
+        face_path = os.path.join(EMPLOYEE_FACES_DIR, f"employee_{employee_id}.jpg")
+        if os.path.exists(face_path):
+            try:
+                os.remove(face_path)
+                deleted_files.append(f"employee_{employee_id}.jpg")
+                print(f"Deleted face image: {face_path}")
+            except Exception as e:
+                errors.append(f"Cannot delete face image: {str(e)}")
+        
+        # Xóa embedding
+        embedding_path = _employee_embedding_path(employee_id)
+        if os.path.exists(embedding_path):
+            try:
+                os.remove(embedding_path)
+                deleted_files.append(f"employee_{employee_id}.npy")
+                print(f"Deleted embedding: {embedding_path}")
+            except Exception as e:
+                errors.append(f"Cannot delete embedding: {str(e)}")
+        
+        if not deleted_files and not errors:
+            return {
+                "success": False,
+                "message": f"Không tìm thấy dữ liệu cho nhân viên {employee_id}",
+                "employee_id": employee_id,
+                "deleted_files": [],
+                "errors": []
+            }
+        
+        success = len(errors) == 0
+        message = f"Đã xóa thành công dữ liệu cho nhân viên {employee_id}" if success else f"Xóa một phần dữ liệu cho nhân viên {employee_id}"
+        
+        return {
+            "success": success,
+            "message": message,
+            "employee_id": employee_id,
+            "deleted_files": deleted_files,
+            "errors": errors
+        }
+        
+    except Exception as e:
+        print(f"Error in delete_employee_face: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Lỗi khi xóa dữ liệu nhân viên: {str(e)}",
+            "employee_id": employee_id,
+            "deleted_files": [],
+            "errors": [str(e)]
         }
 
 @app.get("/face-recognition/health")

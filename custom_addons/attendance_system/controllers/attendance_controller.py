@@ -55,6 +55,36 @@ class AttendanceController(http.Controller):
             _logger.error(f"Unexpected error in face recognition: {str(e)}")
             return {"success": False, "message": f"Lỗi xử lý face recognition: {str(e)}", "confidence": 0.0}
 
+    def _call_face_delete_api(self, employee_id):
+        """Gọi API face recognition để xóa dữ liệu khuôn mặt. Trả về dict chuẩn hóa."""
+        try:
+            url = f"{self.FACE_RECOGNITION_API_URL}/face-recognition/employee/{employee_id}"
+
+            if not employee_id:
+                return {"success": False, "message": "Thiếu employee_id"}
+
+            response = requests.delete(url, timeout=30)
+            response.raise_for_status()
+            result = response.json()
+
+            success = bool(result.get('success', False))
+            message = str(result.get('message', ''))
+            deleted_files = result.get('deleted_files', [])
+            errors = result.get('errors', [])
+            
+            return {
+                "success": success, 
+                "message": message, 
+                "deleted_files": deleted_files,
+                "errors": errors
+            }
+        except requests.exceptions.RequestException as e:
+            _logger.error(f"Face delete API error: {str(e)}")
+            return {"success": False, "message": f"Lỗi kết nối API face delete: {str(e)}"}
+        except Exception as e:
+            _logger.error(f"Unexpected error in face delete: {str(e)}")
+            return {"success": False, "message": f"Lỗi xử lý face delete: {str(e)}"}
+
     def _call_face_register_api(self, face_image, employee_id):
         """Gọi API face recognition để đăng ký khuôn mặt. Trả về dict chuẩn hóa."""
         try:
@@ -234,11 +264,30 @@ class AttendanceController(http.Controller):
             if not employee:
                 return {'error': 'Không tìm thấy nhân viên'}
             
-            # Kiểm tra xem nhân viên đã đăng ký khuôn mặt chưa
+            # Kiểm tra xem nhân viên đã đăng ký khuôn mặt chưa (chỉ cho phép 1 ảnh active)
             has_face_data = request.env['hr.employee.face'].sudo().search([
                 ('employee_id', '=', employee.id),
                 ('is_active', '=', True)
             ], limit=1)
+            
+            # Đảm bảo chỉ có 1 ảnh active cho mỗi nhân viên
+            face_count = request.env['hr.employee.face'].sudo().search_count([
+                ('employee_id', '=', employee.id),
+                ('is_active', '=', True)
+            ])
+            
+            if face_count > 1:
+                _logger.warning(f"Employee {employee.id} has {face_count} active face records. Fixing...")
+                # Giữ lại bản ghi mới nhất, vô hiệu hóa các bản ghi cũ
+                all_faces = request.env['hr.employee.face'].sudo().search([
+                    ('employee_id', '=', employee.id),
+                    ('is_active', '=', True)
+                ], order='create_date desc')
+                
+                if len(all_faces) > 1:
+                    old_faces = all_faces[1:]  # Tất cả trừ bản ghi mới nhất
+                    old_faces.write({'is_active': False, 'notes': 'Vô hiệu hóa do trùng lặp'})
+                    has_face_data = all_faces[0]  # Giữ lại bản ghi mới nhất
             
             if not has_face_data:
                 return {
@@ -290,7 +339,30 @@ class AttendanceController(http.Controller):
             if not face_image:
                 return {'error': 'Không có ảnh khuôn mặt'}
             
-            # Gọi API face recognition để đăng ký
+            # Kiểm tra xem nhân viên đã có ảnh khuôn mặt chưa
+            existing_face = request.env['hr.employee.face'].sudo().search([
+                ('employee_id', '=', employee.id),
+                ('is_active', '=', True)
+            ], limit=1)
+            
+            # Nếu đã có ảnh, xóa dữ liệu cũ trên API server trước
+            if existing_face:
+                _logger.info(f"Deleting existing face data for employee {employee.id} before registering new image")
+                delete_result = self._call_face_delete_api(employee.id)
+                
+                if not delete_result.get('success'):
+                    _logger.warning(f"Failed to delete existing face data: {delete_result.get('message')}")
+                    # Tiếp tục đăng ký mới dù xóa thất bại
+                else:
+                    _logger.info(f"Successfully deleted files: {delete_result.get('deleted_files', [])}")
+                
+                # Vô hiệu hóa bản ghi cũ trong Odoo
+                existing_face.write({
+                    'is_active': False,
+                    'notes': f"Vô hiệu hóa do cập nhật ảnh mới - {fields.Datetime.now()}"
+                })
+            
+            # Gọi API face recognition để đăng ký ảnh mới
             register_result = self._call_face_register_api(
                 face_image=face_image,
                 employee_id=employee.id
@@ -299,37 +371,26 @@ class AttendanceController(http.Controller):
             if not register_result.get('success'):
                 return {'error': register_result.get('message', 'Đăng ký khuôn mặt thất bại')}
             
-            # Lưu ảnh vào database
+            # Lưu ảnh mới vào database
             face_image_data = face_image.split(',')[1] if ',' in face_image else face_image
             
-            # Tạo hoặc cập nhật ảnh khuôn mặt
-            employee_face = request.env['hr.employee.face'].sudo().search([
-                ('employee_id', '=', employee.id),
-                ('is_active', '=', True)
-            ], limit=1)
+            # Luôn tạo bản ghi mới để đảm bảo chỉ có 1 ảnh active
+            request.env['hr.employee.face'].sudo().create({
+                'name': f'Ảnh khuôn mặt {employee.name}',
+                'employee_id': employee.id,
+                'face_image': face_image_data,
+                'action': 'update' if existing_face else 'register',
+                'notes': f"{'Cập nhật' if existing_face else 'Đăng ký'} từ webcam - {fields.Datetime.now()}",
+                'is_active': True
+            })
             
-            if employee_face:
-                # Cập nhật ảnh hiện tại
-                employee_face.write({
-                    'face_image': face_image_data,
-                    'action': 'update',
-                    'notes': 'Cập nhật từ webcam'
-                })
-            else:
-                # Tạo ảnh mới
-                request.env['hr.employee.face'].sudo().create({
-                    'name': f'Ảnh khuôn mặt {employee.name}',
-                    'employee_id': employee.id,
-                    'face_image': face_image_data,
-                    'action': 'register',
-                    'notes': 'Đăng ký từ webcam',
-                    'is_active': True
-                })
+            action_text = 'Cập nhật' if existing_face else 'Đăng ký'
             
             return {
                 'success': True,
-                'message': 'Đăng ký khuôn mặt thành công!',
-                'confidence': register_result.get('confidence', 1.0)
+                'message': f'{action_text} khuôn mặt thành công!',
+                'confidence': register_result.get('confidence', 1.0),
+                'action': action_text.lower()
             }
             
         except Exception as e:
