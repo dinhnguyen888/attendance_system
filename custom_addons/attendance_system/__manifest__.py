@@ -14,10 +14,11 @@
         'python': ['requests'],
     },
     'data': [
-        'security/ir.model.access.csv',
         'views/attendance_view.xml',
         'views/employee_face_views.xml',
         'views/webcam_template.xml',
+        'security/attendance_face_security.xml',
+        'security/ir.model.access.csv',
     ],
     'assets': {
         'web.assets_backend': [

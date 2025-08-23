@@ -1,4 +1,13 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_hr_attendance_face,access.hr.attendance.face,hr_attendance.model_hr_attendance,base.group_user,1,1,1,1
-access_hr_employee_face,access.hr.employee.face,attendance_system.model_hr_employee_face,hr.group_hr_user,1,1,1,1
-access_hr_employee_face_manager,access.hr.employee.face.manager,attendance_system.model_hr_employee_face,hr.group_hr_manager,1,1,1,1
+attendance_employee_access,Attendance Employee Access,hr_attendance.model_hr_attendance,attendance_system.group_attendance_employee,1,1,0,0
+attendance_department_manager_access,Attendance Department Manager Access,hr_attendance.model_hr_attendance,attendance_system.group_attendance_department_manager,1,1,0,0
+attendance_hr_access,Attendance HR Access,hr_attendance.model_hr_attendance,attendance_system.group_attendance_hr,1,1,1,1
+attendance_admin_access,Attendance Admin Access,hr_attendance.model_hr_attendance,base.group_system,1,1,1,1
+attendance_employee_face_access,Attendance Employee Face Access,attendance_system.model_hr_employee_face,attendance_system.group_attendance_employee,1,1,0,0
+attendance_department_manager_face_access,Attendance Department Manager Face Access,attendance_system.model_hr_employee_face,attendance_system.group_attendance_department_manager,1,1,0,0
+attendance_hr_face_access,Attendance HR Face Access,attendance_system.model_hr_employee_face,attendance_system.group_attendance_hr,1,1,1,1
+attendance_admin_face_access,Attendance Admin Face Access,attendance_system.model_hr_employee_face,base.group_system,1,1,1,1
+employee_employee_access,Employee Employee Access,hr.model_hr_employee,attendance_system.group_attendance_employee,1,1,1,0
+employee_department_manager_access,Employee Department Manager Access,hr.model_hr_employee,attendance_system.group_attendance_department_manager,1,1,0,0
+employee_hr_access,Employee HR Access,hr.model_hr_employee,attendance_system.group_attendance_hr,1,1,1,1
+employee_admin_access,Employee Admin Access,hr.model_hr_employee,base.group_system,1,1,1,1
