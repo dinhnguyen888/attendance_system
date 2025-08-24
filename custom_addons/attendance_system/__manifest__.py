@@ -17,6 +17,7 @@
         'security/ir.model.access.csv',
         'views/attendance_view.xml',
         'views/employee_face_views.xml',
+        'views/hr_employee_personal_views.xml',
         'views/webcam_template.xml',
     ],
     'assets': {
