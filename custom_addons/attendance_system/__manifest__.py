@@ -14,6 +14,7 @@
         'python': ['requests'],
     },
     'data': [
+        'security/attendance_security.xml',
         'security/ir.model.access.csv',
         'views/attendance_view.xml',
         'views/employee_face_views.xml',
