@@ -5,12 +5,14 @@
         <field name="model">hr.attendance</field>
         <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='employee_id']" position="after">
+            <!-- <xpath expr="//field[@name='employee_id']" position="after">
                 <field name="face_image" widget="image" class="oe_avatar" readonly="1"/>
-            </xpath>
+            </xpath> -->
             <xpath expr="//field[@name='worked_hours']" position="after">
                 <field name="verification_confidence" widget="percentage" readonly="1"/>
                 <field name="verification_message" readonly="1"/>
+                <field name="wifi_name" readonly="1"/>
+                <field name="wifi_validated" readonly="1"/>
             </xpath>
         </field>
     </record>
@@ -21,19 +23,21 @@
         <field name="model">hr.attendance</field>
         <field name="inherit_id" ref="hr_attendance.view_attendance_tree"/>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='employee_id']" position="after">
+            <!-- <xpath expr="//field[@name='employee_id']" position="after">
                 <field name="face_image" widget="image" class="oe_avatar" optional="show"/>
-            </xpath>
+            </xpath> -->
             <xpath expr="//field[@name='worked_hours']" position="after">
                 <field name="verification_confidence" widget="percentage" optional="show"/>
                 <field name="verification_message" optional="hide"/>
+                <field name="wifi_name" optional="show"/>
+                <field name="wifi_validated" optional="show"/>
             </xpath>
         </field>
     </record>
 
     <!-- Action for Webcam Attendance -->
     <record id="action_webcam_attendance" model="ir.actions.server">
-        <field name="name">Face Attendance</field>
+        <field name="name">Điểm danh khuôn mặt</field>
         <field name="model_id" ref="hr_attendance.model_hr_attendance"/>
         <field name="state">code</field>
         <field name="code">action = {'type': 'ir.actions.act_url', 'url': '/attendance/webcam', 'target': 'self'}</field>
@@ -41,7 +45,7 @@
     
     <!-- Menu for Face Attendance -->
     <menuitem id="menu_webcam_attendance"
-              name="Face Attendance"
+              name="Điểm danh khuôn mặt"
               parent="hr_attendance.menu_hr_attendance_root"
               action="action_webcam_attendance"
               sequence="10"/>

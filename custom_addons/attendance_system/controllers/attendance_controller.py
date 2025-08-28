@@ -136,6 +136,16 @@ class AttendanceController(http.Controller):
             if not face_image:
                 return {'error': 'Không có ảnh khuôn mặt'}
             
+            # Kiểm tra WiFi validation
+            wifi_name = kw.get('wifi_name', '')
+            config = request.env['attendance.config'].sudo().get_config()
+            wifi_validated = config.is_wifi_allowed(wifi_name)
+            
+            if config.wifi_validation_enabled and not wifi_validated:
+                allowed_wifis = config.get_allowed_wifi_list()
+                wifi_list_text = ', '.join(allowed_wifis) if allowed_wifis else 'Chưa cấu hình'
+                return {'error': f'WiFi "{wifi_name}" không được phép. WiFi được phép: {wifi_list_text}'}
+            
             # Gọi API face recognition để xác thực
             face_result = self._call_face_recognition_api(
                 face_image=face_image,
@@ -175,7 +185,9 @@ class AttendanceController(http.Controller):
                 'check_in': current_time,
                 'face_image': face_image,
                 'verification_confidence': face_result.get('confidence', 0.0),
-                'verification_message': face_result.get('message', '')
+                'verification_message': face_result.get('message', ''),
+                'wifi_name': wifi_name,
+                'wifi_validated': wifi_validated
             })
             
             return {
@@ -202,6 +214,16 @@ class AttendanceController(http.Controller):
             face_image = kw.get('face_image')
             if not face_image:
                 return {'error': 'Không có ảnh khuôn mặt'}
+            
+            # Kiểm tra WiFi validation
+            wifi_name = kw.get('wifi_name', '')
+            config = request.env['attendance.config'].sudo().get_config()
+            wifi_validated = config.is_wifi_allowed(wifi_name)
+            
+            if config.wifi_validation_enabled and not wifi_validated:
+                allowed_wifis = config.get_allowed_wifi_list()
+                wifi_list_text = ', '.join(allowed_wifis) if allowed_wifis else 'Chưa cấu hình'
+                return {'error': f'WiFi "{wifi_name}" không được phép. WiFi được phép: {wifi_list_text}'}
             
             # Gọi API face recognition để xác thực
             face_result = self._call_face_recognition_api(
@@ -235,7 +257,9 @@ class AttendanceController(http.Controller):
                 'check_out': current_time,
                 'face_image': face_image,
                 'verification_confidence': face_result.get('confidence', 0.0),
-                'verification_message': face_result.get('message', '')
+                'verification_message': face_result.get('message', ''),
+                'wifi_name': wifi_name,
+                'wifi_validated': wifi_validated
             })
             
             # Tính số giờ làm việc
