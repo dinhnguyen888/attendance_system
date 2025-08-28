@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Attendance Configuration Form View -->
+    <record id="view_attendance_config_form" model="ir.ui.view">
+        <field name="name">attendance.config.form</field>
+        <field name="model">attendance.config</field>
+        <field name="arch" type="xml">
+            <form string="Cấu hình điểm danh">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="wifi_validation_enabled"/>
+                        <field name="show_checkin_images"/>
+                    </group>
+                    <group string="Cấu hình WiFi">
+                        <field name="allowed_wifi_names" widget="text" 
+                               placeholder="Nhập tên WiFi được phép, mỗi tên một dòng&#10;Ví dụ:&#10;COMPANY_WIFI&#10;OFFICE_5G&#10;MEETING_ROOM"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Attendance Configuration Tree View -->
+    <record id="view_attendance_config_tree" model="ir.ui.view">
+        <field name="name">attendance.config.tree</field>
+        <field name="model">attendance.config</field>
+        <field name="arch" type="xml">
+            <tree string="Cấu hình điểm danh">
+                <field name="name"/>
+                <field name="wifi_validation_enabled"/>
+                <field name="show_checkin_images"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Attendance Configuration Action -->
+    <record id="action_attendance_config" model="ir.actions.act_window">
+        <field name="name">Cấu hình điểm danh</field>
+        <field name="res_model">attendance.config</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Tạo cấu hình điểm danh
+            </p>
+            <p>
+                Cấu hình các tham số cho hệ thống điểm danh như WiFi được phép, hiển thị ảnh check-in/out.
+            </p>
+        </field>
+    </record>
+
+    <!-- Menu Item -->
+    <menuitem id="menu_attendance_config"
+              name="Cấu hình điểm danh"
+              parent="hr_attendance.menu_hr_attendance_root"
+              action="action_attendance_config"
+              sequence="100"/>
+</odoo>

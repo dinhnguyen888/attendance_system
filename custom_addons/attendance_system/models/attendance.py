@@ -332,6 +332,7 @@ class HrEmployeeFace(models.Model):
 class HrFaceAttendance(models.Model):
     _inherit = 'hr.attendance'
     
-    face_image = fields.Binary("Ảnh khuôn mặt check-in/out", attachment=True)
     verification_confidence = fields.Float("Độ tin cậy xác thực", digits=(3, 2))
     verification_message = fields.Text("Thông báo xác thực")
+    wifi_name = fields.Char("Tên WiFi", help="Tên WiFi khi điểm danh")
+    wifi_validated = fields.Boolean("WiFi hợp lệ", default=False, help="WiFi có trong danh sách được phép")
