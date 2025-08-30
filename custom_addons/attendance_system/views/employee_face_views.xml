@@ -152,6 +152,22 @@
                                         class="btn-secondary"
                                         invisible="not has_face_data"
                                         groups="attendance_system.group_attendance_hr,base.group_system"/>
+                                
+                                <!-- Thông báo quyền cho Employee -->
+                                <div class="alert alert-info" role="alert" 
+                                     groups="attendance_system.group_attendance_employee"
+                                     invisible="not has_face_data">
+                                    <strong>ℹ️ Thông tin quyền:</strong>
+                                    <p>Bạn chỉ có thể xem ảnh khuôn mặt của chính mình. Để quản lý ảnh, vui lòng liên hệ HR hoặc Admin.</p>
+                                </div>
+                                
+                                <!-- Thông báo quyền cho Department Manager -->
+                                <div class="alert alert-warning" role="alert" 
+                                     groups="attendance_system.group_attendance_department_manager"
+                                     invisible="not has_face_data">
+                                    <strong>⚠️ Thông tin quyền:</strong>
+                                    <p>Bạn có thể xem ảnh khuôn mặt của nhân viên trong phòng ban mình, nhưng không thể quản lý. Để quản lý ảnh, vui lòng liên hệ HR.</p>
+                                </div>
                             </group>
                         </group>
                         <group string="Danh sách ảnh khuôn mặt" invisible="not has_face_data">

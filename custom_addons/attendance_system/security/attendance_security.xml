@@ -5,7 +5,7 @@
         <record id="group_attendance_employee" model="res.groups">
             <field name="name">Attendance Employee</field>
             <field name="category_id" ref="base.module_category_human_resources"/>
-        </record>zz
+        </record>
 
         <record id="group_attendance_department_manager" model="res.groups">
             <field name="name">Attendance Department Manager</field>

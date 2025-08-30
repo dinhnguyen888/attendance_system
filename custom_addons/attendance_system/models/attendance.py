@@ -1,6 +1,7 @@
 from odoo import models, fields, api
 import base64
 import logging
+from odoo.exceptions import AccessError
 
 _logger = logging.getLogger(__name__)
 
@@ -332,10 +333,146 @@ class HrEmployeeFace(models.Model):
 class HrFaceAttendance(models.Model):
     _inherit = 'hr.attendance'
     
+    face_image = fields.Binary("Ảnh khuôn mặt", attachment=True, help="Ảnh khuôn mặt khi điểm danh")
     verification_confidence = fields.Float("Độ tin cậy xác thực", digits=(3, 2))
     verification_message = fields.Text("Thông báo xác thực")
     wifi_name = fields.Char("Tên WiFi", help="Tên WiFi khi điểm danh")
     wifi_validated = fields.Boolean("WiFi hợp lệ", default=False, help="WiFi có trong danh sách được phép")
+
+    def check_user_permissions(self, action='read'):
+        """Kiểm tra quyền của user hiện tại"""
+        user = self.env.user
+        employee = user.employee_id
+        
+        if not employee:
+            return {
+                'can_read': False,
+                'can_write': False,
+                'can_create': False,
+                'can_delete': False,
+                'message': 'Bạn không phải là nhân viên trong hệ thống'
+            }
+        
+        # Admin có toàn quyền
+        if user.has_group('base.group_system'):
+            return {
+                'can_read': True,
+                'can_write': True,
+                'can_create': True,
+                'can_delete': True,
+                'message': 'Bạn có toàn quyền quản lý hệ thống'
+            }
+        
+        # HR có toàn quyền attendance
+        if user.has_group('attendance_system.group_attendance_hr'):
+            return {
+                'can_read': True,
+                'can_write': True,
+                'can_create': True,
+                'can_delete': True,
+                'message': 'Bạn có toàn quyền quản lý chấm công'
+            }
+        
+        # Department Manager
+        if user.has_group('attendance_system.group_attendance_department_manager'):
+            # Kiểm tra xem có phải quản lý phòng ban của nhân viên này không
+            if self.employee_id.department_id.manager_id.user_id.id == user.id:
+                return {
+                    'can_read': True,
+                    'can_write': True,
+                    'can_create': False,
+                    'can_delete': False,
+                    'message': 'Bạn có quyền xem và sửa chấm công của nhân viên trong phòng ban'
+                }
+            else:
+                return {
+                    'can_read': False,
+                    'can_write': False,
+                    'can_create': False,
+                    'can_delete': False,
+                    'message': 'Bạn chỉ có thể quản lý chấm công của nhân viên trong phòng ban mình'
+                }
+        
+        # Employee - chỉ thấy dữ liệu của mình
+        if user.has_group('attendance_system.group_attendance_employee'):
+            if self.employee_id.user_id.id == user.id:
+                return {
+                    'can_read': True,
+                    'can_write': False,
+                    'can_create': False,
+                    'can_delete': False,
+                    'message': 'Bạn chỉ có thể xem lịch sử chấm công của chính mình'
+                }
+            else:
+                return {
+                    'can_read': False,
+                    'can_write': False,
+                    'can_create': False,
+                    'can_delete': False,
+                    'message': 'Bạn không có quyền xem dữ liệu chấm công của người khác'
+                }
+        
+        # User thường - không có quyền gì
+        return {
+            'can_read': False,
+            'can_write': False,
+            'can_create': False,
+            'can_delete': False,
+            'message': 'Bạn không có quyền truy cập hệ thống chấm công'
+        }
+
+    def write(self, vals):
+        """Override write để kiểm tra quyền trước khi cho phép sửa"""
+        for record in self:
+            permissions = record.check_user_permissions('write')
+            if not permissions['can_write']:
+                raise AccessError(f"❌ Không có quyền sửa: {permissions['message']}")
+        
+        return super().write(vals)
+
+    def unlink(self):
+        """Override unlink để kiểm tra quyền trước khi cho phép xóa"""
+        for record in self:
+            permissions = record.check_user_permissions('delete')
+            if not permissions['can_delete']:
+                raise AccessError(f"❌ Không có quyền xóa: {permissions['message']}")
+        
+        return super().unlink()
+
+    @api.model
+    def create(self, vals):
+        """Override create để kiểm tra quyền trước khi cho phép tạo mới"""
+        # Kiểm tra quyền tạo mới
+        user = self.env.user
+        
+        # Admin và HR có quyền tạo
+        if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
+            return super().create(vals)
+        
+        # Employee và Department Manager không có quyền tạo
+        if user.has_group('attendance_system.group_attendance_employee'):
+            raise AccessError("❌ Nhân viên không có quyền tạo bản ghi chấm công. Chỉ có thể check-in/check-out qua hệ thống.")
+        
+        if user.has_group('attendance_system.group_attendance_department_manager'):
+            raise AccessError("❌ Quản lý phòng ban không có quyền tạo bản ghi chấm công. Chỉ có thể sửa nếu nhân viên chấm công sai.")
+        
+        raise AccessError("❌ Bạn không có quyền tạo bản ghi chấm công")
+
+    def action_show_permissions_info(self):
+        """Action để hiển thị thông tin quyền của user"""
+        self.ensure_one()
+        permissions = self.check_user_permissions()
+        
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': 'Thông tin quyền',
+                'message': permissions['message'],
+                'type': 'info',
+                'sticky': True,
+            }
+        }
 
 class AttendanceSystemConfig(models.Model):
     _name = 'attendance.system.config'

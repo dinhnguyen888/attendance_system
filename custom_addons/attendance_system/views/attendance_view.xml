@@ -5,14 +5,22 @@
         <field name="model">hr.attendance</field>
         <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
         <field name="arch" type="xml">
-            <!-- <xpath expr="//field[@name='employee_id']" position="after">
-                <field name="face_image" widget="image" class="oe_avatar" readonly="1"/>
-            </xpath> -->
             <xpath expr="//field[@name='worked_hours']" position="after">
                 <field name="verification_confidence" widget="percentage" readonly="1"/>
                 <field name="verification_message" readonly="1"/>
                 <field name="wifi_name" readonly="1"/>
                 <field name="wifi_validated" readonly="1"/>
+            </xpath>
+            
+            <!-- Thêm button hiển thị thông tin quyền -->
+            <xpath expr="//sheet" position="inside">
+                <div class="oe_button_box" name="button_box">
+                    <button name="action_show_permissions_info" 
+                            type="object" 
+                            string="ℹ️ Thông tin quyền" 
+                            class="btn-info"
+                            help="Xem thông tin quyền của bạn đối với bản ghi này"/>
+                </div>
             </xpath>
         </field>
     </record>
@@ -23,9 +31,6 @@
         <field name="model">hr.attendance</field>
         <field name="inherit_id" ref="hr_attendance.view_attendance_tree"/>
         <field name="arch" type="xml">
-            <!-- <xpath expr="//field[@name='employee_id']" position="after">
-                <field name="face_image" widget="image" class="oe_avatar" optional="show"/>
-            </xpath> -->
             <xpath expr="//field[@name='worked_hours']" position="after">
                 <field name="verification_confidence" widget="percentage" optional="show"/>
                 <field name="verification_message" optional="hide"/>

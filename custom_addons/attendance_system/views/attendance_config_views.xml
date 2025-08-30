@@ -7,6 +7,12 @@
         <field name="arch" type="xml">
             <form string="Cấu hình điểm danh">
                 <sheet>
+                    <!-- Thông báo quyền truy cập -->
+                    <div class="alert alert-success" role="alert">
+                        <strong>🔐 Quyền truy cập:</strong>
+                        <p>Chỉ Admin hệ thống mới có thể truy cập và cấu hình hệ thống điểm danh.</p>
+                    </div>
+                    
                     <group>
                         <field name="name"/>
                         <field name="wifi_validation_enabled"/>
@@ -54,5 +60,6 @@
               name="Cấu hình điểm danh"
               parent="hr_attendance.menu_hr_attendance_root"
               action="action_attendance_config"
+              groups="base.group_system"
               sequence="100"/>
 </odoo>
