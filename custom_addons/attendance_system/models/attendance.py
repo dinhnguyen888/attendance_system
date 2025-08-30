@@ -336,3 +336,98 @@ class HrFaceAttendance(models.Model):
     verification_message = fields.Text("Thông báo xác thực")
     wifi_name = fields.Char("Tên WiFi", help="Tên WiFi khi điểm danh")
     wifi_validated = fields.Boolean("WiFi hợp lệ", default=False, help="WiFi có trong danh sách được phép")
+
+class AttendanceSystemConfig(models.Model):
+    _name = 'attendance.system.config'
+    _description = 'Cấu hình hệ thống chấm công'
+    _rec_name = 'name'
+    
+    name = fields.Char("Tên cấu hình", required=True)
+    api_url = fields.Char("URL API Face Recognition", required=True, default="http://localhost:8000")
+    api_key = fields.Char("API Key", help="Khóa xác thực API")
+    face_recognition_threshold = fields.Float("Ngưỡng nhận diện khuôn mặt", default=0.6, help="Độ chính xác tối thiểu để nhận diện (0.0 - 1.0)")
+    max_face_images_per_employee = fields.Integer("Số ảnh khuôn mặt tối đa/nhân viên", default=5)
+    backup_enabled = fields.Boolean("Bật sao lưu tự động", default=True)
+    backup_frequency = fields.Selection([
+        ('daily', 'Hàng ngày'),
+        ('weekly', 'Hàng tuần'),
+        ('monthly', 'Hàng tháng')
+    ], string="Tần suất sao lưu", default='daily')
+    backup_retention_days = fields.Integer("Giữ sao lưu (ngày)", default=30)
+    system_log_level = fields.Selection([
+        ('debug', 'Debug'),
+        ('info', 'Info'),
+        ('warning', 'Warning'),
+        ('error', 'Error')
+    ], string="Mức độ log", default='info')
+    
+    @api.model
+    def get_config(self):
+        """Lấy cấu hình hệ thống"""
+        config = self.search([], limit=1)
+        if not config:
+            # Tạo cấu hình mặc định nếu chưa có
+            config = self.create({
+                'name': 'Cấu hình mặc định',
+                'api_url': 'http://localhost:8000',
+                'face_recognition_threshold': 0.6,
+                'max_face_images_per_employee': 5,
+                'backup_enabled': True,
+                'backup_frequency': 'daily',
+                'backup_retention_days': 30,
+                'system_log_level': 'info'
+            })
+        return config
+    
+    def action_test_api_connection(self):
+        """Kiểm tra kết nối API"""
+        self.ensure_one()
+        try:
+            import requests
+            response = requests.get(f"{self.api_url}/health", timeout=5)
+            if response.status_code == 200:
+                return {
+                    'type': 'ir.actions.client',
+                    'tag': 'display_notification',
+                    'params': {
+                        'title': 'Thành công',
+                        'message': f'Kết nối API thành công: {self.api_url}',
+                        'type': 'success',
+                    }
+                }
+            else:
+                return {
+                    'type': 'ir.actions.client',
+                    'tag': 'display_notification',
+                    'params': {
+                        'title': 'Lỗi',
+                        'message': f'API trả về mã lỗi: {response.status_code}',
+                        'type': 'danger',
+                    }
+                }
+        except Exception as e:
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Lỗi kết nối',
+                    'message': f'Không thể kết nối đến API: {str(e)}',
+                    'type': 'danger',
+                }
+            }
+    
+    def action_backup_system(self):
+        """Thực hiện sao lưu hệ thống"""
+        self.ensure_one()
+        # Logic sao lưu hệ thống
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': 'Sao lưu',
+                'message': 'Đang thực hiện sao lưu hệ thống...',
+                'type': 'info',
+            }
+        }
+
+

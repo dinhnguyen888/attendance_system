@@ -117,6 +117,7 @@
                   name="Quản lý ảnh khuôn mặt"
                   parent="hr.menu_hr_root"
                   action="action_employee_face_management"
+                  groups="attendance_system.group_attendance_hr,base.group_system"
                   sequence="15"/>
 
         <!-- Employee Form View Inheritance for Face Management -->
@@ -143,16 +144,18 @@
                                         type="object" 
                                         string="Đăng ký với API" 
                                         class="btn-success"
-                                        invisible="not has_face_data"/>
+                                        invisible="not has_face_data"
+                                        groups="attendance_system.group_attendance_hr,base.group_system"/>
                                 <button name="action_manage_faces" 
                                         type="object" 
                                         string="Quản lý ảnh khuôn mặt" 
                                         class="btn-secondary"
-                                        invisible="not has_face_data"/>
+                                        invisible="not has_face_data"
+                                        groups="attendance_system.group_attendance_hr,base.group_system"/>
                             </group>
                         </group>
                         <group string="Danh sách ảnh khuôn mặt" invisible="not has_face_data">
-                            <field name="face_management_ids" readonly="1">
+                            <field name="face_management_ids" readonly="1" groups="attendance_system.group_attendance_hr,base.group_system">
                                 <tree>
                                     <field name="name"/>
                                     <field name="face_image" widget="image" class="oe_avatar"/>
