@@ -8,3 +8,6 @@ access_hr_employee_face_attendance_hr,access.hr.employee.face.attendance.hr,atte
 access_hr_employee_personal_user,access.hr.employee.personal.user,attendance_system.model_hr_employee_personal,base.group_user,1,1,1,0
 access_hr_employee_personal_hr_user,access.hr.employee.personal.hr.user,attendance_system.model_hr_employee_personal,hr.group_hr_user,1,1,1,1
 access_hr_employee_personal_hr_manager,access.hr.employee.personal.hr.manager,attendance_system.model_hr_employee_personal,hr.group_hr_manager,1,1,1,1
+access_attendance_config_user,access.attendance.config.user,attendance_system.model_attendance_config,base.group_user,1,0,0,0
+access_attendance_config_hr_user,access.attendance.config.hr.user,attendance_system.model_attendance_config,hr.group_hr_user,1,1,1,1
+access_attendance_config_hr_manager,access.attendance.config.hr.manager,attendance_system.model_attendance_config,hr.group_hr_manager,1,1,1,1

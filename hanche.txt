@@ -1,0 +1,5 @@
+chưa gởi thông tin wifi khi điểm danh : đã triễn khai
+Cần phát triễn thêm mục lớn "Cấu hình điểm danh" ở trong app hr_attendance, ở đó cho phép thay đổi tên wifi : đã triễn khai
+Chưa hiện được ảnh check-in, check-out ở trang overview của hr_attendance : không cần triễn khai
+khi gửi thông tin ảnh vào trong api_service, ảnh bị đặt tên không đúng với tên nhân viên : đã triễn khai thay thế bằng id nhân viên
+#App chưa phân tích được ảnh đang ở môi trường văn phòng hay ngoài văn phòng : chưa triễn khai
