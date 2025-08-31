@@ -332,29 +332,16 @@ class HrEmployeeFace(models.Model):
 
 class HrFaceAttendance(models.Model):
     _inherit = 'hr.attendance'
-    
-    face_image = fields.Binary("Ảnh khuôn mặt", attachment=True, help="Ảnh khuôn mặt khi điểm danh")
+    face_image = fields.Binary("Ảnh khuôn mặt check-in/out", attachment=True)
     verification_confidence = fields.Float("Độ tin cậy xác thực", digits=(3, 2))
     verification_message = fields.Text("Thông báo xác thực")
     wifi_name = fields.Char("Tên WiFi", help="Tên WiFi khi điểm danh")
     wifi_validated = fields.Boolean("WiFi hợp lệ", default=False, help="WiFi có trong danh sách được phép")
 
     def check_user_permissions(self, action='read'):
-        """Kiểm tra quyền của user hiện tại"""
         user = self.env.user
-        employee = user.employee_id
         
-        if not employee:
-            return {
-                'can_read': False,
-                'can_write': False,
-                'can_create': False,
-                'can_delete': False,
-                'message': 'Bạn không phải là nhân viên trong hệ thống'
-            }
-        
-        # Admin có toàn quyền
-        if user.has_group('base.group_system'):
+        if user.has_group('base.group_system') or user.has_group('hr.group_hr_manager'):
             return {
                 'can_read': True,
                 'can_write': True,
@@ -363,7 +350,6 @@ class HrFaceAttendance(models.Model):
                 'message': 'Bạn có toàn quyền quản lý hệ thống'
             }
         
-        # HR có toàn quyền attendance
         if user.has_group('attendance_system.group_attendance_hr'):
             return {
                 'can_read': True,
@@ -373,9 +359,7 @@ class HrFaceAttendance(models.Model):
                 'message': 'Bạn có toàn quyền quản lý chấm công'
             }
         
-        # Department Manager
         if user.has_group('attendance_system.group_attendance_department_manager'):
-            # Kiểm tra xem có phải quản lý phòng ban của nhân viên này không
             if self.employee_id.department_id.manager_id.user_id.id == user.id:
                 return {
                     'can_read': True,
@@ -393,15 +377,14 @@ class HrFaceAttendance(models.Model):
                     'message': 'Bạn chỉ có thể quản lý chấm công của nhân viên trong phòng ban mình'
                 }
         
-        # Employee - chỉ thấy dữ liệu của mình
         if user.has_group('attendance_system.group_attendance_employee'):
             if self.employee_id.user_id.id == user.id:
                 return {
                     'can_read': True,
-                    'can_write': False,
-                    'can_create': False,
+                    'can_write': True,
+                    'can_create': True,
                     'can_delete': False,
-                    'message': 'Bạn chỉ có thể xem lịch sử chấm công của chính mình'
+                    'message': 'Bạn có quyền check-in/check-out và xem lịch sử chấm công của chính mình'
                 }
             else:
                 return {
@@ -412,7 +395,6 @@ class HrFaceAttendance(models.Model):
                     'message': 'Bạn không có quyền xem dữ liệu chấm công của người khác'
                 }
         
-        # User thường - không có quyền gì
         return {
             'can_read': False,
             'can_write': False,
@@ -441,20 +423,16 @@ class HrFaceAttendance(models.Model):
 
     @api.model
     def create(self, vals):
-        """Override create để kiểm tra quyền trước khi cho phép tạo mới"""
-        # Kiểm tra quyền tạo mới
         user = self.env.user
         
-        # Admin và HR có quyền tạo
         if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
             return super().create(vals)
         
-        # Employee và Department Manager không có quyền tạo
-        if user.has_group('attendance_system.group_attendance_employee'):
-            raise AccessError("❌ Nhân viên không có quyền tạo bản ghi chấm công. Chỉ có thể check-in/check-out qua hệ thống.")
-        
         if user.has_group('attendance_system.group_attendance_department_manager'):
-            raise AccessError("❌ Quản lý phòng ban không có quyền tạo bản ghi chấm công. Chỉ có thể sửa nếu nhân viên chấm công sai.")
+            return super().create(vals)
+        
+        if user.has_group('attendance_system.group_attendance_employee'):
+            return super().create(vals)
         
         raise AccessError("❌ Bạn không có quyền tạo bản ghi chấm công")
 

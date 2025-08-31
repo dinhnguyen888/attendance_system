@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # PostgreSQL Database
@@ -15,7 +15,7 @@ services:
 
   # Face Recognition API Service
   face_recognition_api:
-    build: 
+    build:
       context: ./custom_api_services
       dockerfile: Dockerfile
     ports:
