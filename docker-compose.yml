@@ -31,7 +31,9 @@ services:
 
   # Odoo Application
   odoo:
-    image: odoo:17.0
+    build:
+      context: ./custom_addons
+      dockerfile: Dockerfile
     depends_on:
       - postgres
       - face_recognition_api
