@@ -434,6 +434,12 @@
                     const backBtn = document.getElementById('back_btn');
                     const resultDiv = document.getElementById('result');
                     let imageData = null;
+                    let userIp = '';
+                    // Lấy IP public của user
+                    fetch('https://api.ipify.org/?format=json')
+                        .then(r => r.json())
+                        .then(data => { userIp = data.ip || ''; })
+                        .catch(() => { userIp = ''; });
                     
                     // Initialize camera with responsive settings
                     function initializeCamera() {
@@ -554,9 +560,7 @@
                     // Check In functionality
                     checkInBtn.addEventListener('click', function() {
                         if (!imageData) return;
-                        
                         setButtonLoading(checkInBtn, 'Processing...', 'fa-spinner fa-spin');
-                        
                         fetch('/attendance/check_in', {
                             method: 'POST',
                             headers: { 
@@ -566,7 +570,7 @@
                             body: JSON.stringify({
                                 jsonrpc: '2.0',
                                 method: 'call',
-                                params: { face_image: imageData }
+                                params: { face_image: imageData, wifi_name: userIp }
                             })
                         })
                         .then(response => response.json())
@@ -600,9 +604,7 @@
                     // Check Out functionality
                     checkOutBtn.addEventListener('click', function() {
                         if (!imageData) return;
-                        
                         setButtonLoading(checkOutBtn, 'Processing...', 'fa-spinner fa-spin');
-                        
                         fetch('/attendance/check_out', {
                             method: 'POST',
                             headers: { 
@@ -612,7 +614,7 @@
                             body: JSON.stringify({
                                 jsonrpc: '2.0',
                                 method: 'call',
-                                params: { face_image: imageData }
+                                params: { face_image: imageData, wifi_name: userIp }
                             })
                         })
                         .then(response => response.json())

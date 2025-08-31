@@ -9,12 +9,11 @@ class AttendanceConfig(models.Model):
     _rec_name = 'name'
     
     name = fields.Char("Tên cấu hình", required=True, default="Cấu hình điểm danh")
-    allowed_wifi_names = fields.Text("Tên WiFi được phép", 
-                                   help="Danh sách tên WiFi được phép điểm danh, mỗi tên một dòng")
+    allowed_wifi_ips = fields.Text("IP WiFi được phép", 
+                                   help="Danh sách IP WiFi được phép điểm danh, mỗi IP một dòng")
     wifi_validation_enabled = fields.Boolean("Bật kiểm tra WiFi", default=True,
                                            help="Bật/tắt tính năng kiểm tra WiFi khi điểm danh")
-    show_checkin_images = fields.Boolean("Hiển thị ảnh check-in/out", default=True,
-                                       help="Hiển thị ảnh check-in/out trong trang overview")
+
     
     @api.model
     def get_config(self):
