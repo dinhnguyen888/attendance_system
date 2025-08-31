@@ -15,5 +15,4 @@ class HrEmployeePersonal(models.Model):
     job_title = fields.Char(related='employee_id.job_title', string='Chức vụ', readonly=True)
     department_id = fields.Many2one(related='employee_id.department_id', string='Phòng ban', readonly=True)
     
-    # Thông tin có thể chỉnh sửa
 

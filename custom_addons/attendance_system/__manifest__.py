@@ -6,12 +6,13 @@
         Hệ thống chấm công bằng nhận diện khuôn mặt sử dụng OpenCV.
         Tích hợp với custom API service để xác thực khuôn mặt.
         Bao gồm tính năng quản lý ảnh khuôn mặt cho nhân viên.
+        Hỗ trợ mobile app với REST API.
     """,
     'author': 'Đỉnh + Huy + Khánh',
     'license': 'LGPL-3',
     'depends': ['hr', 'hr_attendance', 'web'],
     'external_dependencies': {
-        'python': ['requests'],
+        'python': ['requests', 'PyJWT'],
     },
     'data': [
         'security/attendance_security.xml',

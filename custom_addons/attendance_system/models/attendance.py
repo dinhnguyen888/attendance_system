@@ -1,6 +1,7 @@
 from odoo import models, fields, api
 import base64
 import logging
+from odoo.exceptions import AccessError
 
 _logger = logging.getLogger(__name__)
 
@@ -336,6 +337,120 @@ class HrFaceAttendance(models.Model):
     verification_message = fields.Text("Thông báo xác thực")
     wifi_ip = fields.Char("IP WiFi", help="IP WiFi khi điểm danh")
     wifi_validated = fields.Boolean("WiFi hợp lệ", default=False, help="WiFi có trong danh sách được phép")
+
+    def check_user_permissions(self, action='read'):
+        user = self.env.user
+        
+        if user.has_group('base.group_system') or user.has_group('hr.group_hr_manager'):
+            return {
+                'can_read': True,
+                'can_write': True,
+                'can_create': True,
+                'can_delete': True,
+                'message': 'Bạn có toàn quyền quản lý hệ thống'
+            }
+        
+        if user.has_group('attendance_system.group_attendance_hr'):
+            return {
+                'can_read': True,
+                'can_write': True,
+                'can_create': True,
+                'can_delete': True,
+                'message': 'Bạn có toàn quyền quản lý chấm công'
+            }
+        
+        if user.has_group('attendance_system.group_attendance_department_manager'):
+            if self.employee_id.department_id.manager_id.user_id.id == user.id:
+                return {
+                    'can_read': True,
+                    'can_write': True,
+                    'can_create': False,
+                    'can_delete': False,
+                    'message': 'Bạn có quyền xem và sửa chấm công của nhân viên trong phòng ban'
+                }
+            else:
+                return {
+                    'can_read': False,
+                    'can_write': False,
+                    'can_create': False,
+                    'can_delete': False,
+                    'message': 'Bạn chỉ có thể quản lý chấm công của nhân viên trong phòng ban mình'
+                }
+        
+        if user.has_group('attendance_system.group_attendance_employee'):
+            if self.employee_id.user_id.id == user.id:
+                return {
+                    'can_read': True,
+                    'can_write': True,
+                    'can_create': True,
+                    'can_delete': False,
+                    'message': 'Bạn có quyền check-in/check-out và xem lịch sử chấm công của chính mình'
+                }
+            else:
+                return {
+                    'can_read': False,
+                    'can_write': False,
+                    'can_create': False,
+                    'can_delete': False,
+                    'message': 'Bạn không có quyền xem dữ liệu chấm công của người khác'
+                }
+        
+        return {
+            'can_read': False,
+            'can_write': False,
+            'can_create': False,
+            'can_delete': False,
+            'message': 'Bạn không có quyền truy cập hệ thống chấm công'
+        }
+
+    def write(self, vals):
+        """Override write để kiểm tra quyền trước khi cho phép sửa"""
+        for record in self:
+            permissions = record.check_user_permissions('write')
+            if not permissions['can_write']:
+                raise AccessError(f"❌ Không có quyền sửa: {permissions['message']}")
+        
+        return super().write(vals)
+
+    def unlink(self):
+        """Override unlink để kiểm tra quyền trước khi cho phép xóa"""
+        for record in self:
+            permissions = record.check_user_permissions('delete')
+            if not permissions['can_delete']:
+                raise AccessError(f"❌ Không có quyền xóa: {permissions['message']}")
+        
+        return super().unlink()
+
+    @api.model
+    def create(self, vals):
+        user = self.env.user
+        
+        if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
+            return super().create(vals)
+        
+        if user.has_group('attendance_system.group_attendance_department_manager'):
+            return super().create(vals)
+        
+        if user.has_group('attendance_system.group_attendance_employee'):
+            return super().create(vals)
+        
+        raise AccessError("❌ Bạn không có quyền tạo bản ghi chấm công")
+
+    def action_show_permissions_info(self):
+        """Action để hiển thị thông tin quyền của user"""
+        self.ensure_one()
+        permissions = self.check_user_permissions()
+        
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': 'Thông tin quyền',
+                'message': permissions['message'],
+                'type': 'info',
+                'sticky': True,
+            }
+        }
 
 class AttendanceSystemConfig(models.Model):
     _name = 'attendance.system.config'
