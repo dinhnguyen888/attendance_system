@@ -8,7 +8,7 @@
             <xpath expr="//field[@name='worked_hours']" position="after">
                 <field name="verification_confidence" widget="percentage" readonly="1"/>
                 <field name="verification_message" readonly="1"/>
-                <field name="wifi_name" readonly="1"/>
+                <field name="wifi_ip" readonly="1"/>
                 <field name="wifi_validated" readonly="1"/>
             </xpath>
             
@@ -34,7 +34,7 @@
             <xpath expr="//field[@name='worked_hours']" position="after">
                 <field name="verification_confidence" widget="percentage" optional="show"/>
                 <field name="verification_message" optional="hide"/>
-                <field name="wifi_name" optional="show"/>
+                <field name="wifi_ip" optional="show"/>
                 <field name="wifi_validated" optional="show"/>
             </xpath>
         </field>

@@ -1,6 +1,6 @@
 {
     'name': 'Attendance System Customized',
-    'version': '1.0',
+    'version': '1.2',
     'summary': 'Chấm công bằng nhận diện khuôn mặt',
     'description': """
         Hệ thống chấm công bằng nhận diện khuôn mặt sử dụng OpenCV.

@@ -9,12 +9,11 @@ class AttendanceConfig(models.Model):
     _rec_name = 'name'
     
     name = fields.Char("Tên cấu hình", required=True, default="Cấu hình điểm danh")
-    allowed_wifi_names = fields.Text("Tên WiFi được phép", 
-                                   help="Danh sách tên WiFi được phép điểm danh, mỗi tên một dòng")
+    allowed_wifi_ips = fields.Text("IP WiFi được phép", 
+                                   help="Danh sách IP WiFi được phép điểm danh, mỗi IP một dòng")
     wifi_validation_enabled = fields.Boolean("Bật kiểm tra WiFi", default=True,
                                            help="Bật/tắt tính năng kiểm tra WiFi khi điểm danh")
-    show_checkin_images = fields.Boolean("Hiển thị ảnh check-in/out", default=True,
-                                       help="Hiển thị ảnh check-in/out trong trang overview")
+
     
     @api.model
     def get_config(self):
@@ -23,27 +22,26 @@ class AttendanceConfig(models.Model):
         if not config:
             config = self.create({
                 'name': 'Cấu hình điểm danh mặc định',
-                'allowed_wifi_names': '',
+                'allowed_wifi_ips': '',
                 'wifi_validation_enabled': True,
-                'show_checkin_images': True
             })
         return config
     
-    def get_allowed_wifi_list(self):
-        """Trả về danh sách WiFi được phép"""
+    def get_allowed_wifi_ip_list(self):
+        """Trả về danh sách IP WiFi được phép"""
         self.ensure_one()
-        if not self.allowed_wifi_names:
+        if not self.allowed_wifi_ips:
             return []
-        return [name.strip() for name in self.allowed_wifi_names.split('\n') if name.strip()]
+        return [ip.strip() for ip in self.allowed_wifi_ips.split('\n') if ip.strip()]
     
-    def is_wifi_allowed(self, wifi_name):
-        """Kiểm tra WiFi có được phép không"""
+    def is_wifi_ip_allowed(self, wifi_ip):
+        """Kiểm tra IP WiFi có được phép không"""
         self.ensure_one()
         if not self.wifi_validation_enabled:
             return True
         
-        allowed_list = self.get_allowed_wifi_list()
+        allowed_list = self.get_allowed_wifi_ip_list()
         if not allowed_list:
-            return True  # Nếu không có WiFi nào được cấu hình, cho phép tất cả
+            return True  # Nếu không có IP WiFi nào được cấu hình, cho phép tất cả
         
-        return wifi_name in allowed_list
+        return wifi_ip in allowed_list
