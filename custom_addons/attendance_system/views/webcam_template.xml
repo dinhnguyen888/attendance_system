@@ -570,7 +570,7 @@
                             body: JSON.stringify({
                                 jsonrpc: '2.0',
                                 method: 'call',
-                                params: { face_image: imageData, wifi_name: userIp }
+                                params: { face_image: imageData, wifi_ip: userIp }
                             })
                         })
                         .then(response => response.json())
@@ -614,7 +614,7 @@
                             body: JSON.stringify({
                                 jsonrpc: '2.0',
                                 method: 'call',
-                                params: { face_image: imageData, wifi_name: userIp }
+                                params: { face_image: imageData, wifi_ip: userIp }
                             })
                         })
                         .then(response => response.json())
