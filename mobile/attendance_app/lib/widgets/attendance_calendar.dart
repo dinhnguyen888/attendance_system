@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/attendance_provider.dart';
 import '../constants/app_colors.dart';
 import '../models/attendance.dart';
+import '../utils/date_time_utils.dart';
 
 class AttendanceCalendar extends StatefulWidget {
   const AttendanceCalendar({super.key});
@@ -19,15 +20,23 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
   @override
   void initState() {
     super.initState();
-    _loadCalendarData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadCalendarData();
+    });
   }
 
   void _loadCalendarData() {
     final provider = context.read<AttendanceProvider>();
-    provider.loadAttendanceCalendar(
-      month: _focusedDay.month,
-      year: _focusedDay.year,
-    );
+    provider.clearCalendarError();
+    provider.loadInitialData().then((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    }).catchError((error) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   String _getDayKey(DateTime date) {
@@ -67,10 +76,7 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Colors.white,
-              AppColors.primary.withOpacity(0.05),
-            ],
+            colors: [Colors.white, AppColors.primary.withOpacity(0.05)],
           ),
         ),
         child: Padding(
@@ -100,14 +106,18 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
                         onPressed: () {
                           setState(() {
                             _focusedDay = DateTime(
-                                _focusedDay.year, _focusedDay.month - 1);
+                              _focusedDay.year,
+                              _focusedDay.month - 1,
+                            );
                           });
                           _loadCalendarData();
                         },
                         icon: const Icon(Icons.chevron_left),
                         padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
                         iconSize: 20,
                         style: IconButton.styleFrom(
                           backgroundColor: AppColors.primary.withOpacity(0.1),
@@ -120,7 +130,9 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
                           onTap: () => _showDatePicker(),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
@@ -164,14 +176,18 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
                         onPressed: () {
                           setState(() {
                             _focusedDay = DateTime(
-                                _focusedDay.year, _focusedDay.month + 1);
+                              _focusedDay.year,
+                              _focusedDay.month + 1,
+                            );
                           });
                           _loadCalendarData();
                         },
                         icon: const Icon(Icons.chevron_right),
                         padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
                         iconSize: 20,
                         style: IconButton.styleFrom(
                           backgroundColor: AppColors.primary.withOpacity(0.1),
@@ -211,14 +227,14 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
 
         _events = _parseCalendarData(provider.attendanceCalendar);
 
-        if (provider.error != null) {
+        if (provider.calendarError != null) {
           return Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.error_outline, size: 48, color: Colors.red),
                 const SizedBox(height: 16),
-                Text('Lỗi: ${provider.error}'),
+                Text('Lỗi: ${provider.calendarError}'),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () => _loadCalendarData(),
@@ -242,12 +258,7 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
           );
         }
 
-        return Column(
-          children: [
-            _buildWeekDays(),
-            _buildCalendarDays(),
-          ],
-        );
+        return Column(children: [_buildWeekDays(), _buildCalendarDays()]);
       },
     );
   }
@@ -355,8 +366,12 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
     for (int i = 0; i < days.length; i += 7) {
       final rowDays = days.skip(i).take(7).toList();
       if (rowDays.length < 7) {
-        rowDays.addAll(List.generate(
-            7 - rowDays.length, (index) => const Expanded(child: SizedBox())));
+        rowDays.addAll(
+          List.generate(
+            7 - rowDays.length,
+            (index) => const Expanded(child: SizedBox()),
+          ),
+        );
       }
       rows.add(Row(children: rowDays));
     }
@@ -370,10 +385,7 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
       decoration: BoxDecoration(
         color: AppColors.primary.withOpacity(0.05),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.primary.withOpacity(0.1),
-          width: 1,
-        ),
+        border: Border.all(color: AppColors.primary.withOpacity(0.1), width: 1),
       ),
       child: Wrap(
         alignment: WrapAlignment.center,
@@ -434,7 +446,8 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
   }
 
   Map<String, List<Attendance>> _parseCalendarData(
-      Map<String, dynamic> calendarData) {
+    Map<String, dynamic> calendarData,
+  ) {
     final events = <String, List<Attendance>>{};
 
     if (calendarData['attendances'] != null) {
@@ -489,7 +502,9 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
         elevation: 8,
         child: Container(
           decoration: BoxDecoration(
@@ -497,10 +512,7 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Colors.white,
-                AppColors.primary.withOpacity(0.05),
-              ],
+              colors: [Colors.white, AppColors.primary.withOpacity(0.05)],
             ),
           ),
           child: Column(
@@ -585,7 +597,9 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
                                       color: event.checkOut != null
                                           ? AppColors.completed.withOpacity(0.1)
                                           : AppColors.working.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(10),
+                                      borderRadius: BorderRadius.circular(
+                                        10,
+                                      ),
                                     ),
                                     child: Icon(
                                       event.checkOut != null
@@ -613,22 +627,33 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
                                         ),
                                         const SizedBox(height: 8),
                                         _buildInfoRow(
-                                            'Check-in:',
-                                            event.checkIn ?? 'Chưa check-in',
-                                            Icons.login,
-                                            AppColors.working),
+                                          'Check-in:',
+                                          event.checkIn != null
+                                              ? DateTimeUtils.formatTimeShort(
+                                                  event.checkIn,
+                                                )
+                                              : 'Chưa check-in',
+                                          Icons.login,
+                                          AppColors.working,
+                                        ),
                                         const SizedBox(height: 6),
                                         _buildInfoRow(
-                                            'Check-out:',
-                                            event.checkOut ?? 'Chưa check-out',
-                                            Icons.logout,
-                                            AppColors.completed),
+                                          'Check-out:',
+                                          event.checkOut != null
+                                              ? DateTimeUtils.formatTimeShort(
+                                                  event.checkOut,
+                                                )
+                                              : 'Chưa check-out',
+                                          Icons.logout,
+                                          AppColors.completed,
+                                        ),
                                         const SizedBox(height: 6),
                                         _buildInfoRow(
-                                            'Tổng giờ:',
-                                            '${event.totalHours?.toStringAsFixed(1) ?? "0.0"}h',
-                                            Icons.access_time,
-                                            AppColors.primary),
+                                          'Tổng giờ:',
+                                          '${event.totalHours?.toStringAsFixed(1) ?? "0.0"}h',
+                                          Icons.access_time,
+                                          AppColors.primary,
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -672,7 +697,11 @@ class _AttendanceCalendarState extends State<AttendanceCalendar> {
   }
 
   Widget _buildInfoRow(
-      String label, String value, IconData icon, Color iconColor) {
+    String label,
+    String value,
+    IconData icon,
+    Color iconColor,
+  ) {
     return Row(
       children: [
         Icon(icon, size: 16, color: iconColor),

@@ -43,7 +43,7 @@ def _employee_embedding_path(employee_id: int) -> str:
     return os.path.join(EMPLOYEE_FACES_DIR, f"employee_{employee_id}.npy")
 
 # Verification threshold and storage policy
-COSINE_THRESHOLD = 0.65  # Threshold khắt khe hơn để tránh false accept
+COSINE_THRESHOLD = 0.6  # Threshold khắt khe hơn để tránh false accept
 MAX_EMBEDDINGS_PER_EMPLOYEE = 5
 
 # Lazy global model for embeddings

@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:camera/camera.dart';
-import 'package:image_picker/image_picker.dart';
 import 'permission_service.dart';
 
 class CameraService {
@@ -27,8 +26,13 @@ class CameraService {
 
       _cameras = await availableCameras();
       if (_cameras != null && _cameras!.isNotEmpty) {
+        CameraDescription frontCamera = _cameras!.firstWhere(
+          (camera) => camera.lensDirection == CameraLensDirection.front,
+          orElse: () => _cameras![0],
+        );
+
         _controller = CameraController(
-          _cameras![0],
+          frontCamera,
           ResolutionPreset.medium,
           enableAudio: false,
           imageFormatGroup: ImageFormatGroup.bgra8888,
@@ -88,22 +92,6 @@ class CameraService {
       await reinitialize();
       return null;
     }
-  }
-
-  Future<File?> pickImageFromGallery() async {
-    try {
-      final hasPermission = await _permissionService.requestStoragePermission();
-      if (!hasPermission) return null;
-
-      final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
-        return File(pickedFile.path);
-      }
-    } catch (e) {
-      return null;
-    }
-    return null;
   }
 
   void dispose() {

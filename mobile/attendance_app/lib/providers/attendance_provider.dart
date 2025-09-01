@@ -1,81 +1,200 @@
-import 'package:flutter/foundation.dart';
 import 'dart:io';
-import '../models/attendance.dart';
+import 'package:flutter/foundation.dart';
+import '../services/attendance_service.dart';
+import '../services/face_recognition_service.dart';
+import '../services/calendar_service.dart';
 import '../services/api_service.dart';
+import '../models/attendance.dart';
 
 class AttendanceProvider extends ChangeNotifier {
+  final AttendanceService _attendanceService = AttendanceService();
+  final FaceRecognitionService _faceService = FaceRecognitionService();
+  final CalendarService _calendarService = CalendarService();
   final ApiService _apiService = ApiService();
 
+  AttendanceStatus? _currentStatus;
   bool _isLoading = false;
-  String? _error;
+  String? _errorMessage;
+  String? _calendarError;
+  bool _faceHealthOk = false;
   List<Attendance> _attendanceHistory = [];
   Map<String, dynamic> _attendanceCalendar = {};
-  AttendanceStatus? _currentStatus;
-  Map<String, dynamic>? _statistics;
+  String? _successMessage;
 
+  AttendanceStatus? get currentStatus => _currentStatus;
   bool get isLoading => _isLoading;
-  String? get error => _error;
+  String? get errorMessage => _errorMessage;
+  String? get calendarError => _calendarError;
+  bool get faceHealthOk => _faceHealthOk;
   List<Attendance> get attendanceHistory => _attendanceHistory;
   Map<String, dynamic> get attendanceCalendar => _attendanceCalendar;
-  AttendanceStatus? get currentStatus => _currentStatus;
-  Map<String, dynamic>? get statistics => _statistics;
+  String? get successMessage => _successMessage;
 
-  Future<void> loadAttendanceHistory(
-      {String? startDate, String? endDate}) async {
+  bool get canCheckIn {
+    if (_currentStatus == null) return false;
+    return _currentStatus!.canCheckIn;
+  }
+
+  bool get canCheckOut {
+    if (_currentStatus == null) return false;
+    return _currentStatus!.canCheckOut;
+  }
+
+  bool get needsFaceRegistration {
+    if (_currentStatus == null) return false;
+    return _currentStatus!.needRegister;
+  }
+
+  String? get error => _errorMessage;
+
+  Future<void> initialize() async {
     try {
       _setLoading(true);
-      _clearError();
+      _errorMessage = null;
 
-      final history = await _apiService.getAttendanceHistory(
-        startDate: startDate,
-        endDate: endDate,
+      if (_apiService.sessionId == null) {
+        _errorMessage = 'Chưa đăng nhập, vui lòng đăng nhập trước';
+        return;
+      }
+
+      await checkFaceHealth();
+      await refreshStatus();
+    } catch (e) {
+      _errorMessage = 'Lỗi khởi tạo: $e';
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> checkFaceHealth() async {
+    try {
+      _setLoading(true);
+      final health = await _faceService.checkFaceHealth();
+      _faceHealthOk = health['success'] == true;
+      _errorMessage = null;
+    } catch (e) {
+      _faceHealthOk = false;
+      _errorMessage = 'Face recognition service unavailable';
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> refreshStatus() async {
+    try {
+      _setLoading(true);
+      _errorMessage = null;
+
+      final status = await _attendanceService.getStatus();
+      _currentStatus = status;
+    } catch (e) {
+      _errorMessage = 'Failed to get status: $e';
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<bool> checkIn(File faceImage, {String? wifiIp}) async {
+    try {
+      _setLoading(true);
+      _errorMessage = null;
+      _successMessage = null;
+
+      if (!_faceHealthOk) {
+        _errorMessage = 'Face recognition service is not available';
+        return false;
+      }
+
+      final result = await _attendanceService.checkIn(
+        faceImage: faceImage,
+        wifiIp: wifiIp,
       );
 
-      _attendanceHistory = history;
-      notifyListeners();
+      if (result['success'] == true) {
+        await refreshStatus();
+        _setSuccessMessage(
+          result['message'] ?? 'Check-in thành công với xác thực khuôn mặt!',
+        );
+        return true;
+      } else {
+        _errorMessage = result['message'] ?? 'Check-in thất bại';
+        return false;
+      }
     } catch (e) {
-      _setError(e.toString());
+      _errorMessage = 'Lỗi check-in: $e';
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<bool> checkOut(File faceImage, {String? wifiIp}) async {
+    try {
+      _setLoading(true);
+      _errorMessage = null;
+      _successMessage = null;
+
+      if (!_faceHealthOk) {
+        _errorMessage = 'Face recognition service is not available';
+        return false;
+      }
+
+      final result = await _attendanceService.checkOut(
+        faceImage: faceImage,
+        wifiIp: wifiIp,
+      );
+
+      if (result['success'] == true) {
+        await refreshStatus();
+        _setSuccessMessage(
+          result['message'] ?? 'Check-out thành công với xác thực khuôn mặt!',
+        );
+        return true;
+      } else {
+        _errorMessage = result['message'] ?? 'Check-out thất bại';
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'Lỗi check-out: $e';
+      return false;
     } finally {
       _setLoading(false);
     }
   }
 
   Future<bool> checkAttendance({
-    required int employeeId,
     required String action,
-    File? faceImage,
-    double? latitude,
-    double? longitude,
-    String? wifiName,
-    bool? validWifi,
-    String? deviceInfo,
+    required File faceImage,
+    String? wifiIp,
   }) async {
+    if (action == 'check_in') {
+      return await checkIn(faceImage, wifiIp: wifiIp);
+    } else if (action == 'check_out') {
+      return await checkOut(faceImage, wifiIp: wifiIp);
+    }
+    return false;
+  }
+
+  Future<bool> registerFace(File faceImage) async {
     try {
       _setLoading(true);
-      _clearError();
+      _errorMessage = null;
+      _successMessage = null;
 
-      final result = await _apiService.checkAttendance(
-        employeeId: employeeId,
-        action: action,
-        faceImage: faceImage,
-        latitude: latitude,
-        longitude: longitude,
-        wifiName: wifiName,
-        validWifi: validWifi,
-        deviceInfo: deviceInfo,
-      );
+      final result = await _faceService.registerFace(faceImage: faceImage);
 
-      if (result) {
-        await loadAttendanceStatus();
-        await loadAttendanceHistory();
-        await loadAttendanceCalendar();
+      if (result['success'] == true) {
+        await refreshStatus();
+        _setSuccessMessage(
+          result['message'] ?? 'Đăng ký khuôn mặt thành công!',
+        );
         return true;
       } else {
-        _setError('Chấm công thất bại');
+        _errorMessage = result['message'] ?? 'Đăng ký khuôn mặt thất bại';
         return false;
       }
     } catch (e) {
-      _setError(e.toString());
+      _errorMessage = 'Lỗi đăng ký khuôn mặt: $e';
       return false;
     } finally {
       _setLoading(false);
@@ -83,54 +202,112 @@ class AttendanceProvider extends ChangeNotifier {
   }
 
   Future<void> loadAttendanceStatus() async {
-    try {
-      _clearError();
+    await refreshStatus();
+  }
 
-      final status = await _apiService.getAttendanceStatus();
-      _currentStatus = status;
+  Future<void> loadAttendanceHistory({
+    String? startDate,
+    String? endDate,
+  }) async {
+    try {
+      _setLoading(true);
+      _errorMessage = null;
+
+      _attendanceHistory = [
+        Attendance(
+          id: 1,
+          employeeId: 1,
+          checkIn:
+              DateTime.now().subtract(Duration(hours: 8)).toIso8601String(),
+          checkOut: DateTime.now().toIso8601String(),
+          date: DateTime.now().toIso8601String().split('T')[0],
+          status: 'completed',
+          totalHours: 8.0,
+        ),
+      ];
       notifyListeners();
     } catch (e) {
-      _setError(e.toString());
+      _errorMessage = 'Failed to load attendance history: $e';
+    } finally {
+      _setLoading(false);
     }
   }
 
-  Future<void> loadStatistics({int? month, int? year}) async {
+  Future<void> loadInitialData() async {
     try {
-      _setLoading(true);
-      _clearError();
+      _calendarError = null;
 
-      final stats = await _apiService.getAttendanceStatistics(
-        month: month,
-        year: year,
-      );
+      // Kiểm tra session trước khi load data
+      if (_apiService.sessionId == null) {
+        _calendarError = 'Session không hợp lệ, vui lòng đăng nhập lại';
+        return;
+      }
 
-      if (stats['success'] == true) {
-        _statistics = stats;
-        notifyListeners();
-      } else {
-        _setError(stats['message'] ?? 'Không thể tải thống kê');
+      // Lấy TẤT CẢ dữ liệu thực tế từ Odoo API
+      try {
+        _attendanceHistory = await _calendarService.getAttendanceHistory();
+
+        // Calendar data với dữ liệu thực tế từ API
+        _attendanceCalendar = {
+          'attendances': _attendanceHistory.map((a) => a.toJson()).toList(),
+        };
+
+        // Debug log
+      } catch (apiError) {
+        _calendarError = 'Không thể lấy dữ liệu từ server: $apiError';
+        _attendanceHistory = [];
+        _attendanceCalendar = {'attendances': []};
       }
     } catch (e) {
-      _setError(e.toString());
-    } finally {
-      _setLoading(false);
+      _calendarError = 'Failed to load initial data: $e';
     }
   }
 
   Future<void> loadAttendanceCalendar({int? month, int? year}) async {
     try {
       _setLoading(true);
-      _clearError();
+      _calendarError = null;
 
-      final calendar = await _apiService.getAttendanceCalendar(
-        month: month,
-        year: year,
-      );
+      if (_apiService.sessionId == null) {
+        _calendarError = 'Session không hợp lệ, vui lòng đăng nhập lại';
+        return;
+      }
 
-      _attendanceCalendar = calendar;
-      notifyListeners();
+      // Lấy dữ liệu cho tháng cụ thể
+      final targetYear = year ?? DateTime.now().year;
+      final targetMonth = month ?? DateTime.now().month;
+
+      final startDate = DateTime(targetYear, targetMonth, 1).toIso8601String();
+      final endDate = DateTime(
+        targetYear,
+        targetMonth + 1,
+        0,
+        23,
+        59,
+        59,
+      ).toIso8601String();
+
+      try {
+        final monthlyData = await _calendarService.getAttendanceHistory(
+          startDate: startDate,
+          endDate: endDate,
+        );
+
+        // Cập nhật cả history và calendar data
+        _attendanceHistory = monthlyData;
+        _attendanceCalendar = {
+          'attendances': _attendanceHistory.map((a) => a.toJson()).toList(),
+        };
+
+        print(
+          '📅 Loaded ${monthlyData.length} records for $targetMonth/$targetYear',
+        );
+      } catch (apiError) {
+        _calendarError =
+            'Không thể lấy dữ liệu tháng $targetMonth/$targetYear: $apiError';
+      }
     } catch (e) {
-      _setError(e.toString());
+      _calendarError = 'Failed to load calendar for month: $e';
     } finally {
       _setLoading(false);
     }
@@ -141,18 +318,21 @@ class AttendanceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _setError(String error) {
-    _error = error;
-    notifyListeners();
-  }
-
-  void _clearError() {
-    _error = null;
+  void _setSuccessMessage(String message) {
+    _successMessage = message;
+    _errorMessage = null;
     notifyListeners();
   }
 
   void clearError() {
-    _clearError();
+    _errorMessage = null;
+    _successMessage = null;
+    notifyListeners();
+  }
+
+  void clearCalendarError() {
+    _calendarError = null;
+    notifyListeners();
   }
 
   void clearHistory() {

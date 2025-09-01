@@ -6,9 +6,10 @@ class Attendance {
   final String date;
   final double? totalHours;
   final String status;
-  final double? authenticationReliability;
-  final String? wifiName;
-  final bool? validWifi;
+  final double? verificationConfidence;
+  final String? verificationMessage;
+  final String? wifiIp;
+  final bool? wifiValidated;
   final String? overTime;
   final String? checkInMode;
   final String? checkOutMode;
@@ -22,9 +23,10 @@ class Attendance {
     required this.date,
     this.totalHours,
     required this.status,
-    this.authenticationReliability,
-    this.wifiName,
-    this.validWifi,
+    this.verificationConfidence,
+    this.verificationMessage,
+    this.wifiIp,
+    this.wifiValidated,
     this.overTime,
     this.checkInMode,
     this.checkOutMode,
@@ -32,22 +34,35 @@ class Attendance {
   });
 
   factory Attendance.fromJson(Map<String, dynamic> json) {
-    return Attendance(
-      id: json['id'] ?? 0,
-      employeeId: json['employee_id'] ?? 0,
-      checkIn: json['check_in'],
-      checkOut: json['check_out'],
-      date: json['date'] ?? '',
-      totalHours: json['total_hours']?.toDouble(),
-      status: json['status'] ?? '',
-      authenticationReliability: json['authentication_reliability']?.toDouble(),
-      wifiName: json['wifi_name'],
-      validWifi: json['valid_wifi'],
-      overTime: json['over_time'],
-      checkInMode: json['check_in_mode'],
-      checkOutMode: json['check_out_mode'],
-      faceImage: json['face_image'],
-    );
+    try {
+      return Attendance(
+        id: json['id'] ?? 0,
+        employeeId: json['employee_id'] ?? 0,
+        checkIn: json['check_in']?.toString(),
+        checkOut: json['check_out']?.toString(),
+        date: json['date']?.toString() ?? '',
+        totalHours: json['total_hours'] is num
+            ? json['total_hours'].toDouble()
+            : double.tryParse(json['total_hours']?.toString() ?? '0') ?? 0.0,
+        status: json['status']?.toString() ?? '',
+        verificationConfidence: json['verification_confidence'] is num
+            ? json['verification_confidence'].toDouble()
+            : double.tryParse(
+                json['verification_confidence']?.toString() ?? '0'),
+        verificationMessage: json['verification_message']?.toString(),
+        wifiIp: json['wifi_ip']?.toString(),
+        wifiValidated: json['wifi_validated'] is bool
+            ? json['wifi_validated']
+            : (json['wifi_validated']?.toString().toLowerCase() == 'true'),
+        overTime: json['over_time']?.toString(),
+        checkInMode: json['check_in_mode']?.toString(),
+        checkOutMode: json['check_out_mode']?.toString(),
+        faceImage: json['face_image']?.toString(),
+      );
+    } catch (e) {
+      print('❌ Parse error: $e');
+      rethrow;
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -59,9 +74,10 @@ class Attendance {
       'date': date,
       'total_hours': totalHours,
       'status': status,
-      'authentication_reliability': authenticationReliability,
-      'wifi_name': wifiName,
-      'valid_wifi': validWifi,
+      'verification_confidence': verificationConfidence,
+      'verification_message': verificationMessage,
+      'wifi_ip': wifiIp,
+      'wifi_validated': wifiValidated,
       'over_time': overTime,
       'check_in_mode': checkInMode,
       'check_out_mode': checkOutMode,
@@ -76,6 +92,9 @@ class AttendanceStatus {
   final String? checkIn;
   final String? checkOut;
   final double totalHours;
+  final bool canCheckIn;
+  final bool canCheckOut;
+  final bool needRegister;
 
   AttendanceStatus({
     required this.status,
@@ -83,16 +102,35 @@ class AttendanceStatus {
     this.checkIn,
     this.checkOut,
     required this.totalHours,
+    this.canCheckIn = false,
+    this.canCheckOut = false,
+    this.needRegister = false,
   });
 
   factory AttendanceStatus.fromJson(Map<String, dynamic> json) {
     return AttendanceStatus(
       status: json['status'] ?? '',
       message: json['message'] ?? '',
-      checkIn: json['check_in'],
-      checkOut: json['check_out'],
+      checkIn: json['check_in_time'],
+      checkOut: json['check_out_time'],
       totalHours: (json['total_hours'] ?? 0.0).toDouble(),
+      canCheckIn: json['can_check_in'] ?? false,
+      canCheckOut: json['can_check_out'] ?? false,
+      needRegister: json['need_register'] ?? false,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'status': status,
+      'message': message,
+      'check_in_time': checkIn,
+      'check_out_time': checkOut,
+      'total_hours': totalHours,
+      'can_check_in': canCheckIn,
+      'can_check_out': canCheckOut,
+      'need_register': needRegister,
+    };
   }
 }
 

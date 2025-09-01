@@ -331,17 +331,25 @@ class AttendanceController(http.Controller):
             if current_attendance:
                 return {
                     'status': 'checked_in',
-                    'check_in_time': current_attendance.check_in.strftime('%H:%M:%S'),
+                    'message': f'Đã check-in lúc {current_attendance.check_in.strftime("%H:%M:%S")}',
+                    'check_in_time': current_attendance.check_in.isoformat(),
+                    'check_out_time': current_attendance.check_out.isoformat() if current_attendance.check_out else None,
                     'can_check_in': False,
                     'can_check_out': True,
-                    'need_register': False
+                    'need_register': False,
+                    'attendance_id': current_attendance.id,
+                    'work_hours': round((fields.Datetime.now() - current_attendance.check_in).total_seconds() / 3600, 2) if current_attendance.check_in else 0.0
                 }
             else:
                 return {
                     'status': 'checked_out',
+                    'message': 'Sẵn sàng check-in',
+                    'check_in_time': None,
+                    'check_out_time': None,
                     'can_check_in': True,
                     'can_check_out': False,
-                    'need_register': False
+                    'need_register': False,
+                    'work_hours': 0.0
                 }
                 
         except Exception as e:
@@ -446,3 +454,59 @@ class AttendanceController(http.Controller):
                 'success': False,
                 'error': f'Không thể kết nối API face recognition: {str(e)}'
             }
+    
+    @http.route('/attendance/history', type='json', auth='user')
+    def get_attendance_history(self, **kw):
+        """Lấy lịch sử chấm công của user hiện tại"""
+        try:
+            if not request.env.user or not request.env.user.id:
+                return {'error': 'Session expired'}
+            
+            employee = request.env.user.employee_id
+            if not employee:
+                return {'error': 'Không tìm thấy nhân viên'}
+            
+            start_date = kw.get('start_date')
+            end_date = kw.get('end_date')
+            
+            domain = [('employee_id', '=', employee.id)]
+            
+            if start_date:
+                domain.append(('check_in', '>=', start_date))
+            if end_date:
+                domain.append(('check_in', '<=', end_date))
+            
+            attendances = request.env['hr.attendance'].sudo().search(
+                domain, 
+                order='check_in desc'
+            )
+            
+            result = []
+            for attendance in attendances:
+                result.append({
+                    'id': attendance.id,
+                    'employee_id': attendance.employee_id.id,
+                    'check_in': attendance.check_in.isoformat() if attendance.check_in else None,
+                    'check_out': attendance.check_out.isoformat() if attendance.check_out else None,
+                    'date': attendance.check_in.strftime('%Y-%m-%d') if attendance.check_in else None,
+                    'status': 'completed' if attendance.check_out else 'working',
+                    'total_hours': self._calculate_work_hours(attendance.check_in, attendance.check_out),
+                    'verification_confidence': getattr(attendance, 'verification_confidence', None),
+                    'verification_message': getattr(attendance, 'verification_message', None),
+                    'wifi_ip': getattr(attendance, 'wifi_ip', None),
+                    'wifi_validated': getattr(attendance, 'wifi_validated', None),
+                })
+            
+            return result
+            
+        except Exception as e:
+            _logger.error(f"Get attendance history error: {str(e)}")
+            return {'error': f'Lỗi lấy lịch sử chấm công: {str(e)}'}
+    
+    def _calculate_work_hours(self, check_in, check_out):
+        """Tính số giờ làm việc"""
+        if not check_in or not check_out:
+            return 0.0
+        
+        duration = check_out - check_in
+        return round(duration.total_seconds() / 3600, 2)

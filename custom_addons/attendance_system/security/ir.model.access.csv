@@ -15,8 +15,6 @@ access_hr_department_admin,access.hr.department.admin,hr.model_hr_department,bas
 access_hr_employee_hr,access.hr.employee.hr,hr.model_hr_employee,attendance_system.group_attendance_hr,1,1,1,1
 access_hr_employee_admin,access.hr.employee.admin,hr.model_hr_employee,base.group_system,1,1,1,1
 
-
-
 access_hr_employee_face,access.hr.employee.face,attendance_system.model_hr_employee_face,hr.group_hr_user,1,1,1,1
 access_hr_employee_face_manager,access.hr.employee.face.manager,attendance_system.model_hr_employee_face,hr.group_hr_manager,1,1,1,1
 access_hr_employee_face_attendance_hr,access.hr.employee.face.attendance.hr,attendance_system.model_hr_employee_face,attendance_system.group_attendance_hr,1,1,1,1

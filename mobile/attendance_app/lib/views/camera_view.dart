@@ -18,13 +18,23 @@ class CameraView extends StatefulWidget {
   State<CameraView> createState() => _CameraViewState();
 }
 
-class _CameraViewState extends State<CameraView> {
+class _CameraViewState extends State<CameraView> with TickerProviderStateMixin {
   final CameraService _cameraService = CameraService();
   bool _isLoading = true;
+  bool _isCapturing = false;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    )..repeat();
+    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
     _initializeCamera();
   }
 
@@ -39,6 +49,7 @@ class _CameraViewState extends State<CameraView> {
 
   @override
   void dispose() {
+    _pulseController.dispose();
     _cameraService.dispose();
     super.dispose();
   }
@@ -74,20 +85,81 @@ class _CameraViewState extends State<CameraView> {
 
   Widget _buildOverlay() {
     return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.white, width: 2),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      margin: const EdgeInsets.all(40),
-      child: const Center(
-        child: Text(
-          'Đặt khuôn mặt vào khung',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+      child: Stack(
+        children: [
+          Center(
+            child: AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: _pulseAnimation.value,
+                  child: Container(
+                    width: 280,
+                    height: 380,
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: AppColors.primary.withOpacity(0.8),
+                        width: 3,
+                      ),
+                      borderRadius: BorderRadius.circular(140),
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
-        ),
+          Center(
+            child: Container(
+              width: 250,
+              height: 350,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white, width: 2),
+                borderRadius: BorderRadius.circular(125),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 100,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              margin: const EdgeInsets.symmetric(horizontal: 40),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.face,
+                    color: AppColors.primary,
+                    size: 32,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Đặt khuôn mặt vào khung',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Đảm bảo ánh sáng đủ sáng và khuôn mặt rõ ràng',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -111,42 +183,120 @@ class _CameraViewState extends State<CameraView> {
   Widget _buildBottomBar() {
     return Container(
       padding: const EdgeInsets.all(20),
-      color: Colors.black,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close, color: Colors.white, size: 32),
-          ),
-          FloatingActionButton(
-            onPressed: _captureImage,
-            backgroundColor: AppColors.primary,
-            child: const Icon(Icons.camera_alt, color: Colors.white, size: 32),
-          ),
-          IconButton(
-            onPressed: _pickFromGallery,
-            icon:
-                const Icon(Icons.photo_library, color: Colors.white, size: 32),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
           ),
         ],
+      ),
+      child: SafeArea(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                onPressed: _isCapturing ? null : () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+              ),
+            ),
+            GestureDetector(
+              onTap: _isCapturing ? null : _captureImage,
+              child: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: _isCapturing ? Colors.grey : AppColors.primary,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.3),
+                      blurRadius: 15,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: _isCapturing
+                    ? const CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 3,
+                      )
+                    : const Icon(
+                        Icons.camera_alt,
+                        color: Colors.white,
+                        size: 36,
+                      ),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.3),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                onPressed: _isCapturing ? null : _switchCamera,
+                icon: const Icon(Icons.flip_camera_ios,
+                    color: Colors.white, size: 28),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Future<void> _captureImage() async {
-    final image = await _cameraService.takePicture();
-    if (image != null && mounted) {
-      widget.onImageCaptured(image);
-      Navigator.pop(context);
+    if (_isCapturing) return;
+
+    setState(() {
+      _isCapturing = true;
+    });
+
+    try {
+      final image = await _cameraService.takePicture();
+      if (image != null && mounted) {
+        widget.onImageCaptured(image);
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi chụp ảnh: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCapturing = false;
+        });
+      }
     }
   }
 
-  Future<void> _pickFromGallery() async {
-    final image = await _cameraService.pickImageFromGallery();
-    if (image != null && mounted) {
-      widget.onImageCaptured(image);
-      Navigator.pop(context);
+  Future<void> _switchCamera() async {
+    try {
+      _cameraService.dispose();
+      await _cameraService.initialize();
+      setState(() {});
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Không thể chuyển camera: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

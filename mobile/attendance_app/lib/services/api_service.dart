@@ -37,12 +37,39 @@ class ApiService {
 
   Future<LoginResponse> login(String username, String password) async {
     try {
+      final odooLoginUrl = '${AppConstants.baseUrl}/web/session/authenticate';
+      final odooLoginData = {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "params": {"db": "odoo_db", "login": username, "password": password}
+      };
+
+      final odooResponse = await http
+          .post(
+            Uri.parse(odooLoginUrl),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(odooLoginData),
+          )
+          .timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+
+      if (odooResponse.statusCode == 200) {
+        final odooData = jsonDecode(odooResponse.body);
+
+        if (odooData['result'] != null && odooData['result']['uid'] != null) {
+          final cookies = odooResponse.headers['set-cookie'];
+          if (cookies != null) {
+            final sessionMatch =
+                RegExp(r'session_id=([^;]+)').firstMatch(cookies);
+            if (sessionMatch != null) {
+              final sessionId = sessionMatch.group(1);
+              setSessionId(sessionId!);
+            }
+          }
+        }
+      }
+
       final url = '${AppConstants.baseUrl}/mobile/auth/login';
-
       final requestData = {"username": username, "password": password};
-
-      print('🔐 Login request to: $url');
-      print('🔐 Request data: $requestData');
 
       final response = await http
           .post(
@@ -52,21 +79,11 @@ class ApiService {
           )
           .timeout(Duration(milliseconds: AppConstants.connectionTimeout));
 
-      print('🔐 Login response status: ${response.statusCode}');
-      print('🔐 Login response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('🔐 Login response data: $data');
 
         if (data['success'] == true && data['employee'] != null) {
-          final sessionId = 'mobile_session_${data['employee']['id']}';
-          setSessionId(sessionId);
-
           _token = data['token'];
-
-          print('🔑 Session ID set: $_sessionId');
-          print('🔑 Token set: $_token');
 
           final employee = Employee(
             id: data['employee']['id'] ?? 0,
@@ -87,7 +104,6 @@ class ApiService {
           );
         } else {
           final errorMsg = data['message'] ?? 'Đăng nhập thất bại';
-          print('❌ Login failed: $errorMsg');
           return LoginResponse(
             success: false,
             message: errorMsg,
@@ -99,48 +115,23 @@ class ApiService {
           case 401:
             errorMessage = 'Tên đăng nhập hoặc mật khẩu không đúng';
             break;
-          case 404:
-            errorMessage = 'Không tìm thấy tài khoản';
-            break;
           case 500:
             errorMessage = 'Lỗi server, vui lòng thử lại sau';
             break;
           default:
-            errorMessage = 'Đăng nhập thất bại: HTTP ${response.statusCode}';
+            errorMessage = 'Đăng nhập thất bại (${response.statusCode})';
         }
-        throw Exception(errorMessage);
+        return LoginResponse(
+          success: false,
+          message: errorMessage,
+        );
       }
     } catch (e) {
-      if (e.toString().contains('SocketException')) {
-        throw Exception(
-            'Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng.');
-      } else if (e.toString().contains('TimeoutException')) {
-        throw Exception('Kết nối bị timeout. Vui lòng thử lại.');
-      } else {
-        throw Exception(e.toString());
-      }
+      return LoginResponse(
+        success: false,
+        message: 'Lỗi kết nối: $e',
+      );
     }
-  }
-
-  String? _extractSessionId(Map<String, String> headers) {
-    print('🔍 Extracting session ID from headers: $headers');
-
-    final cookies = headers['set-cookie'];
-    if (cookies != null) {
-      print('🍪 Found cookies: $cookies');
-      final sessionMatch = RegExp(r'session_id=([^;]+)').firstMatch(cookies);
-      if (sessionMatch != null) {
-        final sessionId = sessionMatch.group(1);
-        print('🔑 Extracted session ID: $sessionId');
-        return sessionId;
-      }
-    }
-
-    final allHeaders =
-        headers.entries.map((e) => '${e.key}: ${e.value}').join(', ');
-    print('🔍 All headers: $allHeaders');
-
-    return null;
   }
 
   Future<Employee> getProfile() async {
@@ -249,71 +240,90 @@ class ApiService {
     String? deviceInfo,
   }) async {
     try {
-      if (_token == null) {
-        throw Exception('Token không hợp lệ');
+      if (_sessionId == null) {
+        throw Exception('Session không hợp lệ');
       }
 
-      String? faceImageBase64;
-      if (faceImage != null) {
-        final bytes = await faceImage.readAsBytes();
-        faceImageBase64 = base64Encode(bytes);
-      }
+      final endpoint = action == 'check_in'
+          ? '/attendance/check_in'
+          : '/attendance/check_out';
 
-      final requestData = {
-        "action": action,
-        "face_image": faceImageBase64,
-        "latitude": latitude,
-        "longitude": longitude,
-        "wifi_name": wifiName,
-        "valid_wifi": validWifi ?? false,
-        "device_info": deviceInfo,
+      final attendanceData = {
+        "jsonrpc": "2.0",
+        "method": "call",
+        "params": {
+          "face_image":
+              faceImage != null ? await _fileToBase64(faceImage) : null,
+          "wifi_ip": wifiName,
+        }
       };
 
       final response = await http
           .post(
-            Uri.parse('${AppConstants.baseUrl}/mobile/attendance/check'),
+            Uri.parse('${AppConstants.baseUrl}$endpoint'),
             headers: {
-              'Authorization': 'Bearer $_token',
               'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+              'Cookie': 'session_id=$_sessionId',
             },
-            body: jsonEncode(requestData),
+            body: jsonEncode(attendanceData),
           )
           .timeout(Duration(milliseconds: AppConstants.connectionTimeout));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['success'] == true;
+
+        if (data['result'] != null) {
+          return true;
+        } else if (data['error'] != null) {
+          throw Exception(
+              'Odoo API error: ${data['error']['data']['message'] ?? data['error']['message']}');
+        }
       }
-      return false;
+
+      throw Exception(
+          'Không thể tạo bản ghi chấm công - Status: ${response.statusCode}');
     } catch (e) {
       return false;
     }
   }
 
+  Future<String> _fileToBase64(File file) async {
+    final bytes = await file.readAsBytes();
+    return base64Encode(bytes);
+  }
+
   Future<AttendanceStatus> getAttendanceStatus() async {
     try {
-      if (_token == null) {
-        throw Exception('Token không hợp lệ');
+      if (_sessionId == null) {
+        throw Exception('Session không hợp lệ');
       }
 
-      final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/mobile/attendance/status'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_token',
-        },
-      ).timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+      final statusData = {"jsonrpc": "2.0", "method": "call", "params": {}};
+
+      final response = await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/attendance/status'),
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+              'Cookie': 'session_id=$_sessionId',
+            },
+            body: jsonEncode(statusData),
+          )
+          .timeout(Duration(milliseconds: AppConstants.connectionTimeout));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
-        if (data['success'] == true) {
+        if (data['result'] != null) {
+          final result = data['result'];
           return AttendanceStatus(
-            status: data['status'] ?? '',
-            message: data['message'] ?? '',
-            checkIn: data['check_in'],
-            checkOut: data['check_out'],
-            totalHours: (data['total_hours'] ?? 0.0).toDouble(),
+            status: result['status'] ?? '',
+            message: result['message'] ?? '',
+            checkIn: result['check_in_time'],
+            checkOut: result['check_out_time'],
+            totalHours: 0.0,
           );
         } else {
           throw Exception(data['error'] ?? 'Unknown error');
@@ -322,7 +332,6 @@ class ApiService {
       throw Exception(
           'Failed to get attendance status: ${response.statusCode}');
     } catch (e) {
-      print('❌ Error getting attendance status: $e');
       throw Exception('Network error: $e');
     }
   }
@@ -332,8 +341,8 @@ class ApiService {
     int? year,
   }) async {
     try {
-      if (_token == null) {
-        throw Exception('Token không hợp lệ');
+      if (_sessionId == null) {
+        throw Exception('Session không hợp lệ');
       }
 
       final domain = [
@@ -438,13 +447,11 @@ class ApiService {
       ).timeout(Duration(milliseconds: AppConstants.connectionTimeout));
 
       if (response.statusCode == 200) {
-        print('✅ Session refreshed successfully');
+        // Session refreshed successfully
       } else {
-        print('❌ Session refresh failed with status: ${response.statusCode}');
         throw Exception('Session hết hạn, vui lòng đăng nhập lại');
       }
     } catch (e) {
-      print('💥 Error refreshing session: $e');
       throw Exception('Lỗi refresh session: $e');
     }
   }

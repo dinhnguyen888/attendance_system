@@ -25,31 +25,7 @@ class PermissionService {
     return false;
   }
 
-  Future<bool> requestStoragePermission() async {
-    final status = await Permission.storage.status;
-
-    if (status.isGranted) {
-      return true;
-    }
-
-    if (status.isDenied) {
-      final result = await Permission.storage.request();
-      return result.isGranted;
-    }
-
-    if (status.isPermanentlyDenied) {
-      await openAppSettings();
-      return false;
-    }
-
-    return false;
-  }
-
   Future<bool> hasCameraPermission() async {
     return await Permission.camera.isGranted;
-  }
-
-  Future<bool> hasStoragePermission() async {
-    return await Permission.storage.isGranted;
   }
 }
