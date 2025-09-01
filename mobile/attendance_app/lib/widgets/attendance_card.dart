@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/attendance_provider.dart';
 import '../constants/app_colors.dart';
 import '../models/attendance.dart';
+import '../utils/date_time_utils.dart';
 
 class AttendanceCard extends StatelessWidget {
   const AttendanceCard({super.key});
@@ -65,7 +66,7 @@ class AttendanceCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            status.message,
+                            _getFormattedStatusMessage(status),
                             style: const TextStyle(
                               fontSize: 14,
                               color: AppColors.textSecondary,
@@ -167,7 +168,7 @@ class AttendanceCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            time ?? '--:--',
+            DateTimeUtils.formatTimeShort(time),
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
@@ -209,14 +210,39 @@ class AttendanceCard extends StatelessWidget {
 
   String _getStatusTitle(String status) {
     switch (status) {
+      case 'checked_out':
       case 'not_started':
-        return 'Chưa check-in';
+        return 'Today';
+      case 'checked_in':
       case 'working':
         return 'Đang làm việc';
       case 'completed':
         return 'Hoàn thành';
+      case 'no_face_registered':
+        return 'Chưa đăng ký';
       default:
-        return 'Không xác định';
+        return 'Today';
+    }
+  }
+
+  String _getFormattedStatusMessage(AttendanceStatus status) {
+    switch (status.status) {
+      case 'checked_in':
+      case 'working':
+        if (status.checkIn != null) {
+          final formattedTime = DateTimeUtils.formatTime(status.checkIn);
+          return 'Đã check-in lúc $formattedTime';
+        }
+        return status.message;
+      case 'checked_out':
+      case 'completed':
+        if (status.checkOut != null) {
+          final formattedTime = DateTimeUtils.formatTime(status.checkOut);
+          return 'Đã check-out lúc $formattedTime';
+        }
+        return status.message;
+      default:
+        return status.message;
     }
   }
 }

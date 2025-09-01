@@ -37,7 +37,6 @@ dependencies:
   http: ^1.1.0
   provider: ^6.1.1
   shared_preferences: ^2.2.2
-  image_picker: ^1.0.4
   camera: ^0.10.5+5
   flutter_secure_storage: ^9.0.0
   intl: ^0.18.1
