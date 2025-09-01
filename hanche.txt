@@ -4,3 +4,5 @@ Chưa hiện được ảnh check-in, check-out ở trang overview của hr_atte
 khi gửi thông tin ảnh vào trong api_service, ảnh bị đặt tên không đúng với tên nhân viên : đã triễn khai thay thế bằng id nhân viên
 #App chưa phân tích được ảnh đang ở môi trường văn phòng hay ngoài văn phòng : chưa triễn khai
 #Nếu người dùng ở môi trường quá tối hoặc quá sáng, app sẽ nhận diện sai khuôn mặt
++Quá tối thì ai cũng nhận diện được
++Quá sáng thì không ai nhận diện được
