@@ -179,11 +179,20 @@ class AttendanceController(http.Controller):
             if today_attendance:
                 return {'error': 'Bạn đã check-in hôm nay. Vui lòng check-out trước.'}
             
-            # Tạo bản ghi attendance
+            # Lưu ảnh check-in (chỉ lưu phần base64 data, bỏ header)
+            face_image_data = face_image.split(',')[1] if ',' in face_image else face_image
+            
+            # Tạo bản ghi attendance với ảnh check-in riêng biệt
             attendance = request.env['hr.attendance'].sudo().create({
                 'employee_id': employee.id,
                 'check_in': current_time,
-                'face_image': face_image,
+                'check_in_image': face_image_data,
+                'check_in_confidence': face_result.get('confidence', 0.0),
+                'check_in_message': face_result.get('message', ''),
+                'check_in_wifi_ip': wifi_ip,
+                'check_in_wifi_validated': wifi_validated,
+                # Giữ lại trường cũ để tương thích ngược
+                'face_image': face_image_data,
                 'verification_confidence': face_result.get('confidence', 0.0),
                 'verification_message': face_result.get('message', ''),
                 'wifi_ip': wifi_ip,
@@ -252,10 +261,19 @@ class AttendanceController(http.Controller):
             if check_in_time and (current_time - check_in_time).total_seconds() < 60:
                 return {'error': 'Phải check-out sau ít nhất 1 phút từ khi check-in'}
             
-            # Cập nhật bản ghi attendance
+            # Lưu ảnh check-out (chỉ lưu phần base64 data, bỏ header)
+            face_image_data = face_image.split(',')[1] if ',' in face_image else face_image
+            
+            # Cập nhật bản ghi attendance với ảnh check-out riêng biệt
             attendance.write({
                 'check_out': current_time,
-                'face_image': face_image,
+                'check_out_image': face_image_data,
+                'check_out_confidence': face_result.get('confidence', 0.0),
+                'check_out_message': face_result.get('message', ''),
+                'check_out_wifi_ip': wifi_ip,
+                'check_out_wifi_validated': wifi_validated,
+                # Cập nhật trường cũ để tương thích ngược (sử dụng ảnh check-out)
+                'face_image': face_image_data,
                 'verification_confidence': face_result.get('confidence', 0.0),
                 'verification_message': face_result.get('message', ''),
                 'wifi_ip': wifi_ip,
@@ -491,6 +509,22 @@ class AttendanceController(http.Controller):
                     'date': attendance.check_in.strftime('%Y-%m-%d') if attendance.check_in else None,
                     'status': 'completed' if attendance.check_out else 'working',
                     'total_hours': self._calculate_work_hours(attendance.check_in, attendance.check_out),
+                    
+                    # Thông tin check-in riêng biệt
+                    'check_in_image': getattr(attendance, 'check_in_image', None),
+                    'check_in_confidence': getattr(attendance, 'check_in_confidence', None),
+                    'check_in_message': getattr(attendance, 'check_in_message', None),
+                    'check_in_wifi_ip': getattr(attendance, 'check_in_wifi_ip', None),
+                    'check_in_wifi_validated': getattr(attendance, 'check_in_wifi_validated', None),
+                    
+                    # Thông tin check-out riêng biệt
+                    'check_out_image': getattr(attendance, 'check_out_image', None),
+                    'check_out_confidence': getattr(attendance, 'check_out_confidence', None),
+                    'check_out_message': getattr(attendance, 'check_out_message', None),
+                    'check_out_wifi_ip': getattr(attendance, 'check_out_wifi_ip', None),
+                    'check_out_wifi_validated': getattr(attendance, 'check_out_wifi_validated', None),
+                    
+                    # Giữ lại trường cũ để tương thích ngược
                     'verification_confidence': getattr(attendance, 'verification_confidence', None),
                     'verification_message': getattr(attendance, 'verification_message', None),
                     'wifi_ip': getattr(attendance, 'wifi_ip', None),

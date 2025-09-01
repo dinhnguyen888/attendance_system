@@ -332,11 +332,29 @@ class HrEmployeeFace(models.Model):
 
 class HrFaceAttendance(models.Model):
     _inherit = 'hr.attendance'
-    face_image = fields.Binary("Ảnh khuôn mặt check-in/out", attachment=True)
-    verification_confidence = fields.Float("Độ tin cậy xác thực", digits=(3, 2))
-    verification_message = fields.Text("Thông báo xác thực")
-    wifi_ip = fields.Char("IP WiFi", help="IP WiFi khi điểm danh")
-    wifi_validated = fields.Boolean("WiFi hợp lệ", default=False, help="WiFi có trong danh sách được phép")
+    
+    # Ảnh check-in và check-out riêng biệt
+    check_in_image = fields.Binary( attachment=True, help="Ảnh khuôn mặt khi check-in")
+    check_out_image = fields.Binary(attachment=True, help="Ảnh khuôn mặt khi check-out")
+    
+    # Thông tin xác thực cho check-in
+    check_in_confidence = fields.Float("Độ tin cậy check-in", digits=(3, 2))
+    check_in_message = fields.Text("Thông báo xác thực check-in")
+    check_in_wifi_ip = fields.Char("IP WiFi check-in", help="IP WiFi khi check-in")
+    check_in_wifi_validated = fields.Boolean("WiFi check-in hợp lệ", default=False)
+    
+    # Thông tin xác thực cho check-out
+    check_out_confidence = fields.Float("Độ tin cậy check-out", digits=(3, 2))
+    check_out_message = fields.Text("Thông báo xác thực check-out")
+    check_out_wifi_ip = fields.Char("IP WiFi check-out", help="IP WiFi khi check-out")
+    check_out_wifi_validated = fields.Boolean("WiFi check-out hợp lệ", default=False)
+    
+    # Giữ lại các trường cũ để tương thích ngược
+    face_image = fields.Binary("Ảnh khuôn mặt check-in/out", attachment=True, help="Deprecated: Sử dụng check_in_image và check_out_image")
+    verification_confidence = fields.Float("Độ tin cậy xác thực", digits=(3, 2), help="Deprecated: Sử dụng check_in_confidence và check_out_confidence")
+    verification_message = fields.Text("Thông báo xác thực", help="Deprecated: Sử dụng check_in_message và check_out_message")
+    wifi_ip = fields.Char("IP WiFi", help="Deprecated: Sử dụng check_in_wifi_ip và check_out_wifi_ip")
+    wifi_validated = fields.Boolean("WiFi hợp lệ", default=False, help="Deprecated: Sử dụng check_in_wifi_validated và check_out_wifi_validated")
 
     def check_user_permissions(self, action='read'):
         user = self.env.user

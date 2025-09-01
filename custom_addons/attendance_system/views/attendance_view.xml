@@ -6,10 +6,16 @@
         <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='worked_hours']" position="after">
-                <field name="verification_confidence" widget="percentage" readonly="1"/>
-                <field name="verification_message" readonly="1"/>
-                <field name="wifi_ip" readonly="1"/>
-                <field name="wifi_validated" readonly="1"/>
+                <field name="check_in_image" widget="image" options="{'size': [200, 200]}" readonly="1"/>
+                <field name="check_in_confidence" widget="percentage" readonly="1"/>
+                <field name="check_in_message" readonly="1"/>
+                <field name="check_in_wifi_ip" readonly="1"/>
+                <field name="check_in_wifi_validated" readonly="1"/>
+                <field name="check_out_image" widget="image" options="{'size': [200, 200]}" readonly="1" invisible="not check_out"/>
+                <field name="check_out_confidence" widget="percentage" readonly="1" invisible="not check_out"/>
+                <field name="check_out_message" readonly="1" invisible="not check_out"/>
+                <field name="check_out_wifi_ip" readonly="1" invisible="not check_out"/>
+                <field name="check_out_wifi_validated" readonly="1" invisible="not check_out"/>
             </xpath>
             
             <!-- Thêm button hiển thị thông tin quyền -->
@@ -32,10 +38,19 @@
         <field name="inherit_id" ref="hr_attendance.view_attendance_tree"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='worked_hours']" position="after">
-                <field name="verification_confidence" widget="percentage" optional="show"/>
+                <!-- Thông tin check-in -->
+                <field name="check_in_confidence" widget="percentage" optional="show" string="Độ tin cậy check-in"/>
+                <field name="check_in_wifi_validated" optional="show" string="WiFi check-in hợp lệ"/>
+                
+                <!-- Thông tin check-out -->
+                <field name="check_out_confidence" widget="percentage" optional="show" string="Độ tin cậy check-out"/>
+                <field name="check_out_wifi_validated" optional="show" string="WiFi check-out hợp lệ"/>
+                
+                <!-- Giữ lại trường cũ để tương thích ngược -->
+                <field name="verification_confidence" widget="percentage" optional="hide"/>
                 <field name="verification_message" optional="hide"/>
-                <field name="wifi_ip" optional="show"/>
-                <field name="wifi_validated" optional="show"/>
+                <field name="wifi_ip" optional="hide"/>
+                <field name="wifi_validated" optional="hide"/>
             </xpath>
         </field>
     </record>
