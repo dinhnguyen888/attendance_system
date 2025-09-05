@@ -1,0 +1,7 @@
+TÌm hiểu FXTUI
+Tìm hiểu sâu về Boost
+Tìm hiểu về OpenCV và Nolan json
+Triễn khai TUI
+Triễn khai các HTTP client bằng booost, thấy không ổn quay lại libcurl
+
+TRONG NGÀY MAI NHẤT ĐỊNH PHẢI XONG
