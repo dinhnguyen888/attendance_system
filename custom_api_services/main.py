@@ -302,7 +302,7 @@ def align_face(image: np.ndarray, face_info: tuple) -> np.ndarray:
         return align_face_simple(image, (x, y, w, h))
 
 def normalize_skin_tone(image: np.ndarray, face_coords: tuple, face_obj=None) -> np.ndarray:
-    """Chuẩn hóa màu da khuôn mặt bằng cách tìm điểm da sáng nhất và đồng bộ toàn bộ khuôn mặt"""
+    """Chuẩn hóa màu da khuôn mặt về một màu da mặc định tối ưu cho AI phân biệt"""
     try:
         x, y, w, h = face_coords
         
@@ -364,62 +364,115 @@ def normalize_skin_tone(image: np.ndarray, face_coords: tuple, face_obj=None) ->
                 # Kết hợp với skin mask
                 skin_mask = cv2.bitwise_and(skin_mask, landmark_mask)
         
-        # Tìm vùng da có độ sáng cao nhất
+        # Kiểm tra có vùng da không
         if np.sum(skin_mask) == 0:
             print("Không tìm thấy vùng da, sử dụng ảnh gốc")
             return image
         
-        # Chuyển sang Lab color space để phân tích độ sáng tốt hơn
+        # Định nghĩa màu da mặc định tối ưu cho AI (trong BGR)
+        OPTIMAL_SKIN_COLOR_BGR = np.array([180, 160, 140], dtype=np.float32)  # Màu da trung tính
+        TARGET_BRIGHTNESS = 160  # Độ sáng mục tiêu trong Lab color space
+        
+        print(f"Sử dụng màu da mặc định tối ưu BGR: {OPTIMAL_SKIN_COLOR_BGR}")
+        
+        # Chuyển sang Lab color space để xử lý độ sáng tốt hơn
         lab_face = cv2.cvtColor(face_region, cv2.COLOR_BGR2LAB)
-        l_channel = lab_face[:, :, 0]  # L channel (lightness)
+        l_channel = lab_face[:, :, 0].astype(np.float32)
+        a_channel = lab_face[:, :, 1].astype(np.float32)
+        b_channel = lab_face[:, :, 2].astype(np.float32)
         
-        # Tìm điểm sáng nhất trong vùng da
-        masked_l = np.where(skin_mask > 0, l_channel, 0)
-        if np.max(masked_l) == 0:
-            return image
-            
-        max_brightness = np.max(masked_l)
-        max_positions = np.where(masked_l == max_brightness)
-        
-        if len(max_positions[0]) == 0:
-            return image
-        
-        # Lấy màu da sáng nhất (trong BGR)
-        brightest_y = max_positions[0][0]
-        brightest_x = max_positions[1][0]
-        target_skin_color = face_region[brightest_y, brightest_x]
-        
-        print(f"Điểm da sáng nhất tại ({brightest_x}, {brightest_y}), màu BGR: {target_skin_color}")
-        
-        # Tính toán độ lệch màu trung bình của vùng da so với điểm sáng nhất
-        skin_pixels = face_region[skin_mask > 0]
-        if len(skin_pixels) == 0:
-            return image
-        
-        # Tính vector điều chỉnh màu
-        mean_skin_color = np.mean(skin_pixels, axis=0)
-        color_adjustment = target_skin_color.astype(np.float32) - mean_skin_color.astype(np.float32)
-        
-        print(f"Màu da trung bình: {mean_skin_color}, điều chỉnh: {color_adjustment}")
-        
-        # Áp dụng điều chỉnh màu cho toàn bộ vùng khuôn mặt
-        face_region_float = face_region.astype(np.float32)
-        
-        # Tạo mask mềm để điều chỉnh tự nhiên hơn
+        # Tạo mask mềm cho vùng da
         soft_mask = cv2.GaussianBlur(skin_mask.astype(np.float32), (15, 15), 0) / 255.0
-        soft_mask = np.stack([soft_mask, soft_mask, soft_mask], axis=2)
         
-        # Áp dụng điều chỉnh với mask mềm
-        adjustment_3d = np.broadcast_to(color_adjustment, face_region_float.shape)
-        adjusted_face = face_region_float + (adjustment_3d * soft_mask * 0.6)  # Giảm cường độ điều chỉnh
+        # Bước 1: Cân bằng độ sáng (Histogram Equalization cho vùng da)
+        skin_l_values = l_channel[skin_mask > 0]
+        if len(skin_l_values) > 0:
+            # Tính toán adaptive brightness correction
+            current_mean_brightness = np.mean(skin_l_values)
+            current_std_brightness = np.std(skin_l_values)
+            
+            print(f"Độ sáng hiện tại: mean={current_mean_brightness:.1f}, std={current_std_brightness:.1f}")
+            
+            # Adaptive histogram equalization cho vùng da với thông số mạnh hơn
+            clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(6,6))  # Tăng clipLimit và giảm tileGridSize
+            
+            # Áp dụng CLAHE chỉ cho vùng da
+            l_channel_uint8 = l_channel.astype(np.uint8)
+            l_equalized = clahe.apply(l_channel_uint8).astype(np.float32)
+            
+            # Tăng cường độ blend để CLAHE có hiệu quả mạnh hơn
+            blend_strength = 0.9  # Tăng từ mặc định
+            l_channel = l_channel * (1 - soft_mask * blend_strength) + l_equalized * (soft_mask * blend_strength)
+            
+            # Thêm bước làm mịn độ sáng bằng bilateral filter
+            l_channel_smooth = cv2.bilateralFilter(l_channel.astype(np.uint8), 9, 75, 75).astype(np.float32)
+            l_channel = l_channel * (1 - soft_mask * 0.5) + l_channel_smooth * (soft_mask * 0.5)
+            
+            # Điều chỉnh độ sáng trung bình về target với cường độ cao hơn
+            skin_l_after_eq = l_channel[skin_mask > 0]
+            new_mean_brightness = np.mean(skin_l_after_eq)
+            brightness_adjustment = (TARGET_BRIGHTNESS - new_mean_brightness) * 1.2  # Tăng cường độ điều chỉnh
+            
+            # Áp dụng brightness adjustment với soft mask
+            l_channel = l_channel + (brightness_adjustment * soft_mask)
+            
+            # Thêm bước cân bằng local contrast
+            # Tính local mean và điều chỉnh từng vùng
+            kernel_size = 15
+            local_mean = cv2.GaussianBlur(l_channel, (kernel_size, kernel_size), 0)
+            local_diff = l_channel - local_mean
+            enhanced_l = local_mean + local_diff * 0.7  # Giảm local variation
+            l_channel = l_channel * (1 - soft_mask * 0.6) + enhanced_l * (soft_mask * 0.6)
+            
+            print(f"Điều chỉnh độ sáng: {brightness_adjustment:.1f}")
         
-        # Clamp values về range [0, 255]
-        adjusted_face = np.clip(adjusted_face, 0, 255).astype(np.uint8)
+        # Bước 2: Chuẩn hóa màu sắc (a, b channels)
+        # Tính màu da trung bình hiện tại trong Lab
+        skin_pixels_lab = np.stack([l_channel[skin_mask > 0], 
+                                   a_channel[skin_mask > 0], 
+                                   b_channel[skin_mask > 0]], axis=1)
+        
+        if len(skin_pixels_lab) > 0:
+            mean_a = np.mean(skin_pixels_lab[:, 1])
+            mean_b = np.mean(skin_pixels_lab[:, 2])
+            
+            # Chuyển optimal color sang Lab để lấy target a, b
+            optimal_bgr_reshaped = OPTIMAL_SKIN_COLOR_BGR.reshape(1, 1, 3).astype(np.uint8)
+            optimal_lab = cv2.cvtColor(optimal_bgr_reshaped, cv2.COLOR_BGR2LAB)[0, 0]
+            target_a, target_b = optimal_lab[1], optimal_lab[2]
+            
+            # Điều chỉnh a, b channels với cường độ cao hơn
+            a_adjustment = (target_a - mean_a) * 1.5  # Tăng cường độ điều chỉnh màu
+            b_adjustment = (target_b - mean_b) * 1.5
+            
+            # Áp dụng điều chỉnh màu với cường độ cao
+            a_channel = a_channel + (a_adjustment * soft_mask * 0.9)
+            b_channel = b_channel + (b_adjustment * soft_mask * 0.9)
+            
+            # Thêm bước làm mịn màu sắc
+            a_channel_smooth = cv2.GaussianBlur(a_channel.astype(np.uint8), (7, 7), 0).astype(np.float32)
+            b_channel_smooth = cv2.GaussianBlur(b_channel.astype(np.uint8), (7, 7), 0).astype(np.float32)
+            
+            a_channel = a_channel * (1 - soft_mask * 0.3) + a_channel_smooth * (soft_mask * 0.3)
+            b_channel = b_channel * (1 - soft_mask * 0.3) + b_channel_smooth * (soft_mask * 0.3)
+            
+            print(f"Điều chỉnh màu sắc: a={a_adjustment:.1f}, b={b_adjustment:.1f}")
+        
+        # Ghép lại các channel và chuyển về BGR
+        l_channel = np.clip(l_channel, 0, 255)
+        a_channel = np.clip(a_channel, 0, 255)
+        b_channel = np.clip(b_channel, 0, 255)
+        
+        adjusted_lab = np.stack([l_channel.astype(np.uint8), 
+                                a_channel.astype(np.uint8), 
+                                b_channel.astype(np.uint8)], axis=2)
+        
+        adjusted_face = cv2.cvtColor(adjusted_lab, cv2.COLOR_LAB2BGR)
         
         # Áp dụng lại vào ảnh gốc
         normalized_image[y1:y2, x1:x2] = adjusted_face
         
-        print(f"Đã chuẩn hóa màu da cho vùng khuôn mặt {face_region.shape}")
+        print(f"Đã chuẩn hóa màu da về tone mặc định cho vùng khuôn mặt {face_region.shape}")
         return normalized_image
         
     except Exception as e:
