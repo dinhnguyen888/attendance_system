@@ -301,6 +301,131 @@ def align_face(image: np.ndarray, face_info: tuple) -> np.ndarray:
         x, y, w, h = face_info[:4]
         return align_face_simple(image, (x, y, w, h))
 
+def normalize_skin_tone(image: np.ndarray, face_coords: tuple, face_obj=None) -> np.ndarray:
+    """Chuẩn hóa màu da khuôn mặt bằng cách tìm điểm da sáng nhất và đồng bộ toàn bộ khuôn mặt"""
+    try:
+        x, y, w, h = face_coords
+        
+        # Tạo bản sao để không thay đổi ảnh gốc
+        normalized_image = image.copy()
+        
+        # Cắt vùng khuôn mặt với margin nhỏ
+        margin = 0.1
+        x_margin = int(w * margin)
+        y_margin = int(h * margin)
+        x1 = max(0, x - x_margin)
+        y1 = max(0, y - y_margin)
+        x2 = min(image.shape[1], x + w + x_margin)
+        y2 = min(image.shape[0], y + h + y_margin)
+        
+        face_region = image[y1:y2, x1:x2].copy()
+        
+        if face_region.size == 0:
+            return image
+        
+        # Chuyển sang HSV để dễ phân tích màu da
+        hsv_face = cv2.cvtColor(face_region, cv2.COLOR_BGR2HSV)
+        
+        # Tạo mask cho vùng da (dựa trên khoảng màu da trong HSV)
+        # Khoảng màu da trong HSV: H(0-25, 160-180), S(20-255), V(20-255)
+        lower_skin1 = np.array([0, 20, 20], dtype=np.uint8)
+        upper_skin1 = np.array([25, 255, 255], dtype=np.uint8)
+        lower_skin2 = np.array([160, 20, 20], dtype=np.uint8)
+        upper_skin2 = np.array([180, 255, 255], dtype=np.uint8)
+        
+        mask1 = cv2.inRange(hsv_face, lower_skin1, upper_skin1)
+        mask2 = cv2.inRange(hsv_face, lower_skin2, upper_skin2)
+        skin_mask = cv2.bitwise_or(mask1, mask2)
+        
+        # Làm mịn mask bằng morphological operations
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        skin_mask = cv2.morphologyEx(skin_mask, cv2.MORPH_CLOSE, kernel)
+        skin_mask = cv2.morphologyEx(skin_mask, cv2.MORPH_OPEN, kernel)
+        
+        # Nếu có facial landmarks từ InsightFace, sử dụng để cải thiện mask
+        if face_obj is not None and hasattr(face_obj, 'kps') and face_obj.kps is not None:
+            landmarks = face_obj.kps.astype(int)
+            # Điều chỉnh landmarks về tọa độ trong face_region
+            landmarks[:, 0] -= x1
+            landmarks[:, 1] -= y1
+            
+            # Tạo mask từ landmarks (vùng tam giác giữa mắt và mũi)
+            if len(landmarks) >= 3:
+                # Lấy điểm giữa 2 mắt và mũi để tạo vùng da chính
+                left_eye = landmarks[0]
+                right_eye = landmarks[1] 
+                nose = landmarks[2]
+                
+                # Tạo tam giác từ 3 điểm này
+                triangle_points = np.array([left_eye, right_eye, nose], dtype=np.int32)
+                landmark_mask = np.zeros(face_region.shape[:2], dtype=np.uint8)
+                cv2.fillPoly(landmark_mask, [triangle_points], 255)
+                
+                # Kết hợp với skin mask
+                skin_mask = cv2.bitwise_and(skin_mask, landmark_mask)
+        
+        # Tìm vùng da có độ sáng cao nhất
+        if np.sum(skin_mask) == 0:
+            print("Không tìm thấy vùng da, sử dụng ảnh gốc")
+            return image
+        
+        # Chuyển sang Lab color space để phân tích độ sáng tốt hơn
+        lab_face = cv2.cvtColor(face_region, cv2.COLOR_BGR2LAB)
+        l_channel = lab_face[:, :, 0]  # L channel (lightness)
+        
+        # Tìm điểm sáng nhất trong vùng da
+        masked_l = np.where(skin_mask > 0, l_channel, 0)
+        if np.max(masked_l) == 0:
+            return image
+            
+        max_brightness = np.max(masked_l)
+        max_positions = np.where(masked_l == max_brightness)
+        
+        if len(max_positions[0]) == 0:
+            return image
+        
+        # Lấy màu da sáng nhất (trong BGR)
+        brightest_y = max_positions[0][0]
+        brightest_x = max_positions[1][0]
+        target_skin_color = face_region[brightest_y, brightest_x]
+        
+        print(f"Điểm da sáng nhất tại ({brightest_x}, {brightest_y}), màu BGR: {target_skin_color}")
+        
+        # Tính toán độ lệch màu trung bình của vùng da so với điểm sáng nhất
+        skin_pixels = face_region[skin_mask > 0]
+        if len(skin_pixels) == 0:
+            return image
+        
+        # Tính vector điều chỉnh màu
+        mean_skin_color = np.mean(skin_pixels, axis=0)
+        color_adjustment = target_skin_color.astype(np.float32) - mean_skin_color.astype(np.float32)
+        
+        print(f"Màu da trung bình: {mean_skin_color}, điều chỉnh: {color_adjustment}")
+        
+        # Áp dụng điều chỉnh màu cho toàn bộ vùng khuôn mặt
+        face_region_float = face_region.astype(np.float32)
+        
+        # Tạo mask mềm để điều chỉnh tự nhiên hơn
+        soft_mask = cv2.GaussianBlur(skin_mask.astype(np.float32), (15, 15), 0) / 255.0
+        soft_mask = np.stack([soft_mask, soft_mask, soft_mask], axis=2)
+        
+        # Áp dụng điều chỉnh với mask mềm
+        adjustment_3d = np.broadcast_to(color_adjustment, face_region_float.shape)
+        adjusted_face = face_region_float + (adjustment_3d * soft_mask * 0.6)  # Giảm cường độ điều chỉnh
+        
+        # Clamp values về range [0, 255]
+        adjusted_face = np.clip(adjusted_face, 0, 255).astype(np.uint8)
+        
+        # Áp dụng lại vào ảnh gốc
+        normalized_image[y1:y2, x1:x2] = adjusted_face
+        
+        print(f"Đã chuẩn hóa màu da cho vùng khuôn mặt {face_region.shape}")
+        return normalized_image
+        
+    except Exception as e:
+        print(f"Lỗi chuẩn hóa màu da: {str(e)}")
+        return image
+
 def extract_canny_feature_points(image: np.ndarray, face_obj, bbox: tuple) -> Optional[np.ndarray]:
     """Trích xuất các điểm đặc trưng từ khuôn mặt sử dụng Canny edge detection"""
     try:
@@ -894,17 +1019,18 @@ async def verify_face(
                 "employee_id": employee_id
             }
         
-        # Bước 4: Trích xuất Canny feature points từ khuôn mặt hiện tại
+        # Bước 4: Áp dụng chuẩn hóa màu da trước khi trích xuất features
         face_info = faces[0]
-        current_features = extract_canny_feature_points(processed_image, face_info[4] if len(face_info) > 4 else None, face_info[:4])
+        face_obj = face_info[4] if len(face_info) > 4 else None
         
-        if current_features is None:
-            return {
-                "success": False,
-                "message": "Không thể trích xuất đặc trưng khuôn mặt từ ảnh",
-                "confidence": 0.0,
-                "employee_id": employee_id
-            }
+        # Chuẩn hóa màu da trên ảnh gốc (không phải processed_image)
+        normalized_image = normalize_skin_tone(image, face_info[:4], face_obj)
+        
+        # Tiền xử lý ảnh đã chuẩn hóa
+        _, normalized_processed_image = preprocess_image(normalized_image)
+        
+        # Trích xuất Canny feature points từ ảnh đã chuẩn hóa
+        current_features = extract_canny_feature_points(normalized_processed_image, face_obj, face_info[:4])
         
         # Kiểm tra xem nhân viên đã đăng ký Canny features chưa
         stored_features = load_employee_canny_features(employee_id)
@@ -1006,11 +1132,15 @@ async def register_employee_face(
                 "confidence": 0.0
             }
         
-        # Bước 4: Trích xuất Canny feature points từ khuôn mặt
+        # Bước 4: Áp dụng chuẩn hóa màu da trước khi trích xuất features
         face_info = faces[0]
+        face_obj = face_info[4] if len(face_info) > 4 else None
         
-        # Trích xuất Canny feature points từ ảnh gốc
-        canny_features = extract_canny_feature_points(image, face_info[4] if len(face_info) > 4 else None, face_info[:4])
+        # Chuẩn hóa màu da trên ảnh gốc
+        normalized_image = normalize_skin_tone(image, face_info[:4], face_obj)
+        
+        # Trích xuất Canny feature points từ ảnh đã chuẩn hóa
+        canny_features = extract_canny_feature_points(normalized_image, face_obj, face_info[:4])
         
         if canny_features is None:
             return {

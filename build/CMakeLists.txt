@@ -9,18 +9,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    add_compile_options(-Wall -Wextra)
+    add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 elseif (MSVC)
-    add_compile_options(/W4 /EHsc)
+    add_compile_options(/W4 /permissive- /EHsc)
 endif()
 
 # -----------------------------
 # Dependencies
 # -----------------------------
 find_package(Boost REQUIRED COMPONENTS system thread)
-find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs videoio objdetect)
+find_package(OpenCV REQUIRED)
 find_package(CURL REQUIRED)
-find_package(PkgConfig REQUIRED)
 
 # JSON lib
 find_package(nlohmann_json 3.2.0 QUIET)
@@ -33,30 +32,24 @@ if (NOT nlohmann_json_FOUND)
     FetchContent_MakeAvailable(nlohmann_json)
 endif()
 
-# ncurses (TUI lib)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(NCURSES REQUIRED ncurses)
+# FTXUI (TUI lib)
+include(FetchContent)
+FetchContent_Declare(
+    ftxui
+    GIT_REPOSITORY https://github.com/ftxui/ftxui.git
+    GIT_TAG v5.0.0   # đổi sang version ổn định mới nhất nếu cần
+)
+FetchContent_MakeAvailable(ftxui)
 
 # -----------------------------
 # Target
 # -----------------------------
-set(SOURCES
-    src/main.cpp
-    src/ui/attendance_app.cpp
-    src/ui/login_screen.cpp
-    src/ui/menu_screen.cpp
-    src/ui/loading_screen.cpp
-    src/ui/message_screen.cpp
-    src/ui/schedule_screen.cpp
-    src/ui/base_screen.cpp
-    src/ui/camera_screen.cpp
-    src/ui/ui_utils.cpp
-    src/api/api_client.cpp
-    src/config/config_manager.cpp
-
+add_executable(attendance_client
+    sources/main.cpp
+    sources/camera.cpp
+    sources/http_client.cpp
+    sources/tui.cpp
 )
-
-add_executable(attendance_client ${SOURCES})
 
 target_include_directories(attendance_client
     PRIVATE
@@ -66,10 +59,14 @@ target_include_directories(attendance_client
 
 target_link_libraries(attendance_client
     PRIVATE
-        ${NCURSES_LIBRARIES}
+        Boost::system
+        Boost::thread
+        CURL::libcurl
         ${OpenCV_LIBS}
-        ${CURL_LIBRARIES}
         nlohmann_json::nlohmann_json
+        ftxui::screen
+        ftxui::dom
+        ftxui::component
 )
 
 # -----------------------------
