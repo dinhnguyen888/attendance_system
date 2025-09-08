@@ -3,13 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import cv2
 import numpy as np
-import base64
-import json
 from typing import Optional, Tuple
-import os
-import tempfile
-import threading
+import insightface
+from insightface.app import FaceAnalysis
+from scipy.spatial.distance import cosine, cdist
 import math
+import os
+import threading
+
 os.environ["INSIGHTFACE_USE_TORCH"] = "0"
 os.environ["ONNXRUNTIME_FORCE_CPU"] = "1"
 # InsightFace (ArcFace embeddings) for high-accuracy face comparison
@@ -169,47 +170,617 @@ def process_uploaded_image(file: UploadFile) -> np.ndarray:
         print(f"Lỗi xử lý ảnh upload: {str(e)}")
         raise ValueError(f"Lỗi xử lý ảnh upload: {str(e)}")
 
-def detect_faces(image: np.ndarray) -> list:
-    """Phát hiện khuôn mặt trong ảnh"""
+def preprocess_image(image: np.ndarray, target_size: tuple = (640, 640)) -> np.ndarray:
+    """Bước 2: Tiền xử lý ảnh theo chuẩn InsightFace"""
     try:
-        # Kiểm tra ảnh cơ bản
-        if image is None:
-            raise ValueError("Ảnh không hợp lệ")
+        # Chuyển đổi color space từ BGR sang RGB
+        if len(image.shape) == 3 and image.shape[2] == 3:
+            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        else:
+            rgb_image = image
         
-        # Load cascade classifier
+        # Resize ảnh về kích thước phù hợp cho detection
+        resized = cv2.resize(rgb_image, target_size, interpolation=cv2.INTER_LINEAR)
+        
+        # Chuẩn hóa pixel values về range [0,1]
+        normalized = resized.astype(np.float32) / 255.0
+        
+        print(f"Preprocessed image: {image.shape} -> {resized.shape}, normalized to [0,1]")
+        return normalized, resized
+        
+    except Exception as e:
+        print(f"Lỗi tiền xử lý ảnh: {str(e)}")
+        raise
+
+def detect_faces_insightface(image: np.ndarray) -> list:
+    """Bước 3: Phát hiện khuôn mặt bằng InsightFace RetinaFace"""
+    try:
+        app = _get_face_app()
+        if app is None:
+            # Fallback to OpenCV Haar cascades
+            return detect_faces_opencv(image)
+        
+        # Sử dụng InsightFace để detect faces
+        faces = app.get(image)
+        
+        if not faces:
+            print("Không tìm thấy khuôn mặt bằng InsightFace")
+            return []
+        
+        # Chuyển đổi format từ InsightFace sang OpenCV format (x, y, w, h)
+        opencv_faces = []
+        for face in faces:
+            bbox = face.bbox.astype(int)
+            x, y, x2, y2 = bbox
+            w, h = x2 - x, y2 - y
+            opencv_faces.append((x, y, w, h, face))  # Thêm face object để dùng landmarks
+        
+        print(f"InsightFace detected {len(opencv_faces)} faces")
+        return opencv_faces
+        
+    except Exception as e:
+        print(f"Lỗi phát hiện khuôn mặt InsightFace: {str(e)}")
+        # Fallback to OpenCV
+        return detect_faces_opencv(image)
+
+def detect_faces_opencv(image: np.ndarray) -> list:
+    """Fallback: Phát hiện khuôn mặt bằng OpenCV Haar cascades"""
+    try:
+        # Chuyển về BGR nếu cần cho OpenCV
+        if len(image.shape) == 3 and image.shape[2] == 3:
+            # Kiểm tra xem có phải RGB không (giá trị trong [0,1])
+            if image.max() <= 1.0:
+                bgr_image = (image * 255).astype(np.uint8)
+                bgr_image = cv2.cvtColor(bgr_image, cv2.COLOR_RGB2BGR)
+            else:
+                bgr_image = image
+        else:
+            bgr_image = image
+        
+        # Load cascade classifier với tham số tối ưu
         cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         face_cascade = cv2.CascadeClassifier(cascade_path)
         
         # Chuyển sang grayscale
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2GRAY)
         
-        # Phát hiện khuôn mặt
-        faces = face_cascade.detectMultiScale(gray, 1.1, 4)
-        print(f"Detected {len(faces)} faces")
+        # Phát hiện khuôn mặt với tham số tối ưu
+        faces = face_cascade.detectMultiScale(
+            gray, 
+            scaleFactor=1.05,  # Tăng độ chính xác
+            minNeighbors=6,    # Giảm false positive
+            minSize=(80, 80),  # Kích thước tối thiểu
+            flags=cv2.CASCADE_SCALE_IMAGE
+        )
         
-        return faces
+        # Chuyển đổi format để tương thích
+        opencv_faces = [(x, y, w, h, None) for x, y, w, h in faces]
+        
+        print(f"OpenCV detected {len(opencv_faces)} faces")
+        return opencv_faces
         
     except Exception as e:
-        print(f"Lỗi phát hiện khuôn mặt: {str(e)}")
-        raise
+        print(f"Lỗi phát hiện khuôn mặt OpenCV: {str(e)}")
+        return []
 
-def extract_face_features(image: np.ndarray, face_coords: tuple) -> np.ndarray:
-    """Trích xuất đặc trưng khuôn mặt"""
+def align_face(image: np.ndarray, face_info: tuple) -> np.ndarray:
+    """Bước 4: Căn chỉnh khuôn mặt sử dụng facial landmarks"""
     try:
-        # Lấy tọa độ
+        x, y, w, h, face_obj = face_info
+        
+        # Nếu có InsightFace face object với landmarks
+        if face_obj is not None and hasattr(face_obj, 'kps') and face_obj.kps is not None:
+            # Sử dụng landmarks từ InsightFace để align
+            landmarks = face_obj.kps.astype(np.float32)
+            
+            # Định nghĩa landmarks chuẩn cho khuôn mặt 112x112
+            standard_landmarks = np.array([
+                [38.2946, 51.6963],  # Left eye
+                [73.5318, 51.5014],  # Right eye  
+                [56.0252, 71.7366],  # Nose tip
+                [41.5493, 92.3655],  # Left mouth corner
+                [70.7299, 92.2041]   # Right mouth corner
+            ], dtype=np.float32)
+            
+            # Tính affine transformation matrix
+            tform = cv2.estimateAffinePartial2D(landmarks, standard_landmarks)[0]
+            
+            # Áp dụng transformation
+            aligned_face = cv2.warpAffine(image, tform, (112, 112))
+            
+            print("Face aligned using InsightFace landmarks")
+            return aligned_face
+        
+        else:
+            # Fallback: Crop và resize đơn giản
+            return align_face_simple(image, (x, y, w, h))
+            
+    except Exception as e:
+        print(f"Lỗi căn chỉnh khuôn mặt: {str(e)}")
+        # Fallback to simple alignment
+        x, y, w, h = face_info[:4]
+        return align_face_simple(image, (x, y, w, h))
+
+def normalize_skin_tone(image: np.ndarray, face_coords: tuple, face_obj=None) -> np.ndarray:
+    """Chuẩn hóa màu da khuôn mặt về một màu da mặc định tối ưu cho AI phân biệt"""
+    try:
         x, y, w, h = face_coords
         
-        # Cắt khuôn mặt
-        face_roi = image[y:y+h, x:x+w]
+        # Tạo bản sao để không thay đổi ảnh gốc
+        normalized_image = image.copy()
         
-        # Resize về kích thước chuẩn
-        face_roi = cv2.resize(face_roi, (128, 128))
+        # Cắt vùng khuôn mặt với margin nhỏ
+        margin = 0.1
+        x_margin = int(w * margin)
+        y_margin = int(h * margin)
+        x1 = max(0, x - x_margin)
+        y1 = max(0, y - y_margin)
+        x2 = min(image.shape[1], x + w + x_margin)
+        y2 = min(image.shape[0], y + h + y_margin)
         
-        return face_roi
+        face_region = image[y1:y2, x1:x2].copy()
+        
+        if face_region.size == 0:
+            return image
+        
+        # Chuyển sang HSV để dễ phân tích màu da
+        hsv_face = cv2.cvtColor(face_region, cv2.COLOR_BGR2HSV)
+        
+        # Tạo mask cho vùng da (dựa trên khoảng màu da trong HSV)
+        # Khoảng màu da trong HSV: H(0-25, 160-180), S(20-255), V(20-255)
+        lower_skin1 = np.array([0, 20, 20], dtype=np.uint8)
+        upper_skin1 = np.array([25, 255, 255], dtype=np.uint8)
+        lower_skin2 = np.array([160, 20, 20], dtype=np.uint8)
+        upper_skin2 = np.array([180, 255, 255], dtype=np.uint8)
+        
+        mask1 = cv2.inRange(hsv_face, lower_skin1, upper_skin1)
+        mask2 = cv2.inRange(hsv_face, lower_skin2, upper_skin2)
+        skin_mask = cv2.bitwise_or(mask1, mask2)
+        
+        # Làm mịn mask bằng morphological operations
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        skin_mask = cv2.morphologyEx(skin_mask, cv2.MORPH_CLOSE, kernel)
+        skin_mask = cv2.morphologyEx(skin_mask, cv2.MORPH_OPEN, kernel)
+        
+        # Nếu có facial landmarks từ InsightFace, sử dụng để cải thiện mask
+        if face_obj is not None and hasattr(face_obj, 'kps') and face_obj.kps is not None:
+            landmarks = face_obj.kps.astype(int)
+            # Điều chỉnh landmarks về tọa độ trong face_region
+            landmarks[:, 0] -= x1
+            landmarks[:, 1] -= y1
+            
+            # Tạo mask từ landmarks (vùng tam giác giữa mắt và mũi)
+            if len(landmarks) >= 3:
+                # Lấy điểm giữa 2 mắt và mũi để tạo vùng da chính
+                left_eye = landmarks[0]
+                right_eye = landmarks[1] 
+                nose = landmarks[2]
+                
+                # Tạo tam giác từ 3 điểm này
+                triangle_points = np.array([left_eye, right_eye, nose], dtype=np.int32)
+                landmark_mask = np.zeros(face_region.shape[:2], dtype=np.uint8)
+                cv2.fillPoly(landmark_mask, [triangle_points], 255)
+                
+                # Kết hợp với skin mask
+                skin_mask = cv2.bitwise_and(skin_mask, landmark_mask)
+        
+        # Kiểm tra có vùng da không
+        if np.sum(skin_mask) == 0:
+            print("Không tìm thấy vùng da, sử dụng ảnh gốc")
+            return image
+        
+        # Định nghĩa màu da mặc định tối ưu cho AI (trong BGR)
+        OPTIMAL_SKIN_COLOR_BGR = np.array([180, 160, 140], dtype=np.float32)  # Màu da trung tính
+        TARGET_BRIGHTNESS = 160  # Độ sáng mục tiêu trong Lab color space
+        
+        print(f"Sử dụng màu da mặc định tối ưu BGR: {OPTIMAL_SKIN_COLOR_BGR}")
+        
+        # Chuyển sang Lab color space để xử lý độ sáng tốt hơn
+        lab_face = cv2.cvtColor(face_region, cv2.COLOR_BGR2LAB)
+        l_channel = lab_face[:, :, 0].astype(np.float32)
+        a_channel = lab_face[:, :, 1].astype(np.float32)
+        b_channel = lab_face[:, :, 2].astype(np.float32)
+        
+        # Tạo mask mềm cho vùng da
+        soft_mask = cv2.GaussianBlur(skin_mask.astype(np.float32), (15, 15), 0) / 255.0
+        
+        # Bước 1: Cân bằng độ sáng (Histogram Equalization cho vùng da)
+        skin_l_values = l_channel[skin_mask > 0]
+        if len(skin_l_values) > 0:
+            # Tính toán adaptive brightness correction
+            current_mean_brightness = np.mean(skin_l_values)
+            current_std_brightness = np.std(skin_l_values)
+            
+            print(f"Độ sáng hiện tại: mean={current_mean_brightness:.1f}, std={current_std_brightness:.1f}")
+            
+            # Adaptive histogram equalization cho vùng da với thông số mạnh hơn
+            clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(6,6))  # Tăng clipLimit và giảm tileGridSize
+            
+            # Áp dụng CLAHE chỉ cho vùng da
+            l_channel_uint8 = l_channel.astype(np.uint8)
+            l_equalized = clahe.apply(l_channel_uint8).astype(np.float32)
+            
+            # Tăng cường độ blend để CLAHE có hiệu quả mạnh hơn
+            blend_strength = 0.9  # Tăng từ mặc định
+            l_channel = l_channel * (1 - soft_mask * blend_strength) + l_equalized * (soft_mask * blend_strength)
+            
+            # Thêm bước làm mịn độ sáng bằng bilateral filter
+            l_channel_smooth = cv2.bilateralFilter(l_channel.astype(np.uint8), 9, 75, 75).astype(np.float32)
+            l_channel = l_channel * (1 - soft_mask * 0.5) + l_channel_smooth * (soft_mask * 0.5)
+            
+            # Điều chỉnh độ sáng trung bình về target với cường độ cao hơn
+            skin_l_after_eq = l_channel[skin_mask > 0]
+            new_mean_brightness = np.mean(skin_l_after_eq)
+            brightness_adjustment = (TARGET_BRIGHTNESS - new_mean_brightness) * 1.2  # Tăng cường độ điều chỉnh
+            
+            # Áp dụng brightness adjustment với soft mask
+            l_channel = l_channel + (brightness_adjustment * soft_mask)
+            
+            # Thêm bước cân bằng local contrast
+            # Tính local mean và điều chỉnh từng vùng
+            kernel_size = 15
+            local_mean = cv2.GaussianBlur(l_channel, (kernel_size, kernel_size), 0)
+            local_diff = l_channel - local_mean
+            enhanced_l = local_mean + local_diff * 0.7  # Giảm local variation
+            l_channel = l_channel * (1 - soft_mask * 0.6) + enhanced_l * (soft_mask * 0.6)
+            
+            print(f"Điều chỉnh độ sáng: {brightness_adjustment:.1f}")
+        
+        # Bước 2: Chuẩn hóa màu sắc (a, b channels)
+        # Tính màu da trung bình hiện tại trong Lab
+        skin_pixels_lab = np.stack([l_channel[skin_mask > 0], 
+                                   a_channel[skin_mask > 0], 
+                                   b_channel[skin_mask > 0]], axis=1)
+        
+        if len(skin_pixels_lab) > 0:
+            mean_a = np.mean(skin_pixels_lab[:, 1])
+            mean_b = np.mean(skin_pixels_lab[:, 2])
+            
+            # Chuyển optimal color sang Lab để lấy target a, b
+            optimal_bgr_reshaped = OPTIMAL_SKIN_COLOR_BGR.reshape(1, 1, 3).astype(np.uint8)
+            optimal_lab = cv2.cvtColor(optimal_bgr_reshaped, cv2.COLOR_BGR2LAB)[0, 0]
+            target_a, target_b = optimal_lab[1], optimal_lab[2]
+            
+            # Điều chỉnh a, b channels với cường độ cao hơn
+            a_adjustment = (target_a - mean_a) * 1.5  # Tăng cường độ điều chỉnh màu
+            b_adjustment = (target_b - mean_b) * 1.5
+            
+            # Áp dụng điều chỉnh màu với cường độ cao
+            a_channel = a_channel + (a_adjustment * soft_mask * 0.9)
+            b_channel = b_channel + (b_adjustment * soft_mask * 0.9)
+            
+            # Thêm bước làm mịn màu sắc
+            a_channel_smooth = cv2.GaussianBlur(a_channel.astype(np.uint8), (7, 7), 0).astype(np.float32)
+            b_channel_smooth = cv2.GaussianBlur(b_channel.astype(np.uint8), (7, 7), 0).astype(np.float32)
+            
+            a_channel = a_channel * (1 - soft_mask * 0.3) + a_channel_smooth * (soft_mask * 0.3)
+            b_channel = b_channel * (1 - soft_mask * 0.3) + b_channel_smooth * (soft_mask * 0.3)
+            
+            print(f"Điều chỉnh màu sắc: a={a_adjustment:.1f}, b={b_adjustment:.1f}")
+        
+        # Ghép lại các channel và chuyển về BGR
+        l_channel = np.clip(l_channel, 0, 255)
+        a_channel = np.clip(a_channel, 0, 255)
+        b_channel = np.clip(b_channel, 0, 255)
+        
+        adjusted_lab = np.stack([l_channel.astype(np.uint8), 
+                                a_channel.astype(np.uint8), 
+                                b_channel.astype(np.uint8)], axis=2)
+        
+        adjusted_face = cv2.cvtColor(adjusted_lab, cv2.COLOR_LAB2BGR)
+        
+        # Áp dụng lại vào ảnh gốc
+        normalized_image[y1:y2, x1:x2] = adjusted_face
+        
+        print(f"Đã chuẩn hóa màu da về tone mặc định cho vùng khuôn mặt {face_region.shape}")
+        return normalized_image
         
     except Exception as e:
-        print(f"Lỗi trích xuất khuôn mặt: {str(e)}")
+        print(f"Lỗi chuẩn hóa màu da: {str(e)}")
+        return image
+
+def extract_canny_feature_points(image: np.ndarray, face_obj, bbox: tuple) -> Optional[np.ndarray]:
+    """Trích xuất các điểm đặc trưng từ khuôn mặt sử dụng Canny edge detection"""
+    try:
+        x, y, w, h = bbox
+        
+        # Crop face region với margin
+        margin = 0.1
+        x_margin = int(w * margin)
+        y_margin = int(h * margin)
+        x1 = max(0, x - x_margin)
+        y1 = max(0, y - y_margin)
+        x2 = min(image.shape[1], x + w + x_margin)
+        y2 = min(image.shape[0], y + h + y_margin)
+        
+        face_region = image[y1:y2, x1:x2]
+        
+        if face_region.size == 0:
+            return None
+        
+        # Chuyển về grayscale
+        if len(face_region.shape) == 3:
+            gray_face = cv2.cvtColor(face_region, cv2.COLOR_BGR2GRAY)
+        else:
+            gray_face = face_region.copy()
+        
+        # Resize về kích thước chuẩn để đảm bảo consistency
+        standard_size = (200, 200)
+        gray_face = cv2.resize(gray_face, standard_size)
+        
+        # Áp dụng Gaussian blur để giảm noise
+        blurred = cv2.GaussianBlur(gray_face, (5, 5), 0)
+        
+        # Canny edge detection
+        edges = cv2.Canny(blurred, 50, 150, apertureSize=3)
+        
+        # Tìm contours từ edges
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Trích xuất feature points từ contours
+        feature_points = []
+        
+        for contour in contours:
+            # Chỉ lấy contours có kích thước hợp lý
+            if cv2.contourArea(contour) > 20:
+                # Approximate contour để giảm số điểm
+                epsilon = 0.02 * cv2.arcLength(contour, True)
+                approx = cv2.approxPolyDP(contour, epsilon, True)
+                
+                # Thêm các điểm vào feature points
+                for point in approx:
+                    x_coord, y_coord = point[0]
+                    # Normalize coordinates to 0-1 range
+                    norm_x = x_coord / standard_size[0]
+                    norm_y = y_coord / standard_size[1]
+                    feature_points.append([norm_x, norm_y])
+        
+        # Giới hạn số lượng feature points để tránh quá tải
+        max_points = 100
+        if len(feature_points) > max_points:
+            # Sắp xếp theo khoảng cách từ center và chọn những điểm quan trọng nhất
+            center_x, center_y = 0.5, 0.5
+            feature_points.sort(key=lambda p: abs(p[0] - center_x) + abs(p[1] - center_y))
+            feature_points = feature_points[:max_points]
+        
+        if len(feature_points) < 10:
+            print(f"Không đủ feature points: {len(feature_points)}")
+            return None
+        
+        feature_array = np.array(feature_points, dtype=np.float32)
+        print(f"Extracted {len(feature_points)} Canny feature points")
+        
+        return feature_array
+        
+    except Exception as e:
+        print(f"Lỗi trích xuất Canny feature points: {str(e)}")
+        return None
+
+def compare_canny_features(features1: np.ndarray, features2: np.ndarray, threshold: float = 0.1) -> float:
+    """So sánh độ tương đồng giữa hai tập hợp Canny feature points"""
+    try:
+        if features1 is None or features2 is None:
+            return 0.0
+        
+        if len(features1) == 0 or len(features2) == 0:
+            return 0.0
+        
+        # Sử dụng Hungarian algorithm để match các điểm gần nhất
+        
+        # Tính ma trận khoảng cách giữa tất cả các cặp điểm
+        distances = cdist(features1, features2, metric='euclidean')
+        
+        # Tìm các cặp điểm có khoảng cách nhỏ nhất
+        matched_pairs = 0
+        total_distance = 0.0
+        
+        # Với mỗi điểm trong features1, tìm điểm gần nhất trong features2
+        for i in range(len(features1)):
+            min_dist_idx = np.argmin(distances[i])
+            min_distance = distances[i][min_dist_idx]
+            
+            if min_distance <= threshold:
+                matched_pairs += 1
+                total_distance += min_distance
+        
+        if matched_pairs == 0:
+            return 0.0
+        
+        # Tính similarity score
+        avg_distance = total_distance / matched_pairs
+        match_ratio = matched_pairs / max(len(features1), len(features2))
+        
+        # Similarity score kết hợp match ratio và average distance
+        similarity = match_ratio * (1.0 - avg_distance / threshold)
+        
+        print(f"Feature comparison: {matched_pairs}/{len(features1)} matched, avg_dist={avg_distance:.4f}, similarity={similarity:.4f}")
+        
+        return max(0.0, min(1.0, similarity))
+        
+    except Exception as e:
+        print(f"Lỗi so sánh Canny features: {str(e)}")
+        return 0.0
+
+def save_employee_canny_features(employee_id: int, features: np.ndarray):
+    """Lưu Canny feature points của nhân viên"""
+    try:
+        # Tạo thư mục nếu chưa có
+        features_dir = "employee_canny_features"
+        os.makedirs(features_dir, exist_ok=True)
+        
+        # Lưu features dưới dạng numpy array
+        features_file = os.path.join(features_dir, f"employee_{employee_id}_features.npy")
+        np.save(features_file, features)
+        
+        print(f"Đã lưu {len(features)} Canny feature points cho employee {employee_id}")
+        
+    except Exception as e:
+        print(f"Lỗi lưu Canny features: {str(e)}")
+
+def load_employee_canny_features(employee_id: int) -> Optional[np.ndarray]:
+    """Tải Canny feature points của nhân viên"""
+    try:
+        features_file = os.path.join("employee_canny_features", f"employee_{employee_id}_features.npy")
+        
+        if os.path.exists(features_file):
+            features = np.load(features_file)
+            print(f"Đã tải {len(features)} Canny feature points cho employee {employee_id}")
+            return features
+        else:
+            print(f"Không tìm thấy Canny features cho employee {employee_id}")
+            return None
+        
+    except Exception as e:
+        print(f"Lỗi trích xuất face Canny features: {str(e)}")
+        return None
+
+def align_face_simple(image: np.ndarray, face_coords: tuple) -> np.ndarray:
+    """Căn chỉnh khuôn mặt đơn giản bằng crop và resize"""
+    try:
+        x, y, w, h = face_coords
+        
+        # Mở rộng vùng khuôn mặt 15% để có context tốt hơn (giảm từ 20%)
+        margin = 0.15
+        x_margin = int(w * margin)
+        y_margin = int(h * margin)
+        
+        # Tính toán vùng mở rộng
+        x1 = max(0, x - x_margin)
+        y1 = max(0, y - y_margin)
+        x2 = min(image.shape[1], x + w + x_margin)
+        y2 = min(image.shape[0], y + h + y_margin)
+        
+        # Cắt khuôn mặt với margin
+        face_roi = image[y1:y2, x1:x2]
+        
+        # Resize về kích thước chuẩn 112x112 cho InsightFace
+        aligned_face = cv2.resize(face_roi, (112, 112), interpolation=cv2.INTER_LINEAR)
+        
+        print(f"Face aligned (simple): {face_roi.shape} -> {aligned_face.shape}")
+        return aligned_face
+        
+    except Exception as e:
+        print(f"Lỗi căn chỉnh khuôn mặt đơn giản: {str(e)}")
         raise
+
+def extract_face_embedding_enhanced(image: np.ndarray, face_info: tuple) -> Optional[np.ndarray]:
+    """Bước 5: Trích xuất đặc trưng bằng ArcFace embedding với quy trình chuẩn"""
+    try:
+        print(f"Starting enhanced embedding extraction with face_info: {face_info[:4]}")
+        
+        # Sử dụng InsightFace để extract embedding
+        app = _get_face_app()
+        if app is None:
+            print("InsightFace không khả dụng, fallback to old method")
+            return None
+        
+        # Thử 1: Căn chỉnh khuôn mặt với contour-based extraction
+        try:
+            # Sử dụng face segmentation nếu có InsightFace object
+            if len(face_info) > 4 and face_info[4] is not None:
+                aligned_face = extract_face_with_segmentation(image, face_info[4], face_info[:4])
+                print(f"Face extracted with segmentation: {aligned_face.shape}")
+            else:
+                aligned_face = align_face(image, face_info)
+                print(f"Face aligned (standard): {aligned_face.shape}")
+            
+            # Chuyển về BGR cho InsightFace nếu cần
+            if aligned_face.max() <= 1.0:
+                bgr_face = (aligned_face * 255).astype(np.uint8)
+            else:
+                bgr_face = aligned_face.astype(np.uint8)
+                
+            if len(bgr_face.shape) == 3 and bgr_face.shape[2] == 3:
+                # Kiểm tra xem có phải RGB không
+                if np.mean(bgr_face[:, :, 0]) < np.mean(bgr_face[:, :, 2]):  # R < B suggests RGB
+                    bgr_face = cv2.cvtColor(bgr_face, cv2.COLOR_RGB2BGR)
+            
+            # Extract embedding từ aligned face
+            faces = app.get(bgr_face)
+            
+            if faces:
+                # Chọn face có bbox lớn nhất
+                face_obj = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+                
+                # Lấy normalized embedding
+                embedding = face_obj.normed_embedding
+                if embedding is not None:
+                    # Đảm bảo embedding được normalize về unit length
+                    embedding = np.asarray(embedding, dtype=np.float32)
+                    norm = np.linalg.norm(embedding)
+                    if norm > 0:
+                        embedding = embedding / norm
+                    
+                    print(f"Enhanced embedding extracted successfully: shape={embedding.shape}, norm={np.linalg.norm(embedding):.3f}")
+                    return embedding
+        except Exception as align_error:
+            print(f"Face alignment failed: {str(align_error)}")
+        
+        # Thử 2: Sử dụng contour-based extraction trực tiếp
+        try:
+            x, y, w, h = face_info[:4]
+            face_obj = face_info[4] if len(face_info) > 4 else None
+            
+            # Chuyển image về BGR uint8 nếu cần
+            if image.max() <= 1.0:
+                bgr_image = (image * 255).astype(np.uint8)
+            else:
+                bgr_image = image.astype(np.uint8)
+            
+            if len(bgr_image.shape) == 3 and bgr_image.shape[2] == 3:
+                if np.mean(bgr_image[:, :, 0]) < np.mean(bgr_image[:, :, 2]):
+                    bgr_image = cv2.cvtColor(bgr_image, cv2.COLOR_RGB2BGR)
+            
+            # Sử dụng face segmentation nếu có face object
+            if face_obj is not None:
+                segmented_face = extract_face_with_segmentation(bgr_image, face_obj, (x, y, w, h))
+                print(f"Segmented face extracted: {segmented_face.shape}")
+                
+                # Extract embedding từ segmented face
+                faces = app.get(segmented_face)
+                if faces:
+                    face_obj_new = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+                    embedding = face_obj_new.normed_embedding
+                    if embedding is not None:
+                        embedding = np.asarray(embedding, dtype=np.float32)
+                        norm = np.linalg.norm(embedding)
+                        if norm > 0:
+                            embedding = embedding / norm
+                        print(f"Segmentation embedding extracted: shape={embedding.shape}, norm={np.linalg.norm(embedding):.3f}")
+                        return embedding
+            
+            # Fallback: crop thông thường
+            margin = 0.1
+            x_margin = int(w * margin)
+            y_margin = int(h * margin)
+            x1 = max(0, x - x_margin)
+            y1 = max(0, y - y_margin)
+            x2 = min(bgr_image.shape[1], x + w + x_margin)
+            y2 = min(bgr_image.shape[0], y + h + y_margin)
+            
+            face_crop = bgr_image[y1:y2, x1:x2]
+            print(f"Face cropped (fallback): {face_crop.shape}")
+            
+            faces = app.get(face_crop)
+            if faces:
+                face_obj_new = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+                embedding = face_obj_new.normed_embedding
+                if embedding is not None:
+                    embedding = np.asarray(embedding, dtype=np.float32)
+                    norm = np.linalg.norm(embedding)
+                    if norm > 0:
+                        embedding = embedding / norm
+                    print(f"Fallback embedding extracted: shape={embedding.shape}, norm={np.linalg.norm(embedding):.3f}")
+                    return embedding
+        except Exception as segmentation_error:
+            print(f"Face segmentation method failed: {str(segmentation_error)}")
+        
+        print("All enhanced embedding methods failed")
+        return None
+        
+    except Exception as e:
+        print(f"Lỗi trích xuất embedding enhanced: {str(e)}")
+        return None
 
 def save_employee_face(employee_id: int, face_image: np.ndarray):
     """Lưu ảnh khuôn mặt của nhân viên"""
@@ -314,6 +885,34 @@ def validate_background_color(image: np.ndarray) -> Tuple[bool, str]:
     except Exception as e:
         return False, f"Lỗi kiểm tra màu nền: {str(e)}"
 
+
+def extract_face_region_only(image: np.ndarray, face_info: tuple, margin_ratio: float = 0.1) -> np.ndarray:
+    """Cắt chỉ vùng khuôn mặt với margin rất nhỏ - không bao gồm vai"""
+    try:
+        x, y, w, h = face_info[:4]
+        
+        # Tính margin rất nhỏ chỉ để đảm bảo không mất phần khuôn mặt
+        x_margin = int(w * margin_ratio)
+        y_margin = int(h * margin_ratio)
+        
+        # Tính toán vùng cắt với margin nhỏ
+        x1 = max(0, x - x_margin)
+        y1 = max(0, y - y_margin)
+        x2 = min(image.shape[1], x + w + x_margin)
+        y2 = min(image.shape[0], y + h + y_margin)
+        
+        # Cắt vùng khuôn mặt
+        face_region = image[y1:y2, x1:x2]
+        
+        print(f"Face region extracted: original {image.shape} -> face region {face_region.shape}")
+        print(f"Face bbox: ({x}, {y}, {w}, {h}) -> cropped region: ({x1}, {y1}, {x2-x1}, {y2-y1})")
+        
+        return face_region
+        
+    except Exception as e:
+        print(f"Lỗi cắt vùng khuôn mặt: {str(e)}")
+        raise
+
 def scale_image_to_standard(image: np.ndarray, target_width: int = 480) -> np.ndarray:
     """Scale ảnh về kích thước chuẩn để tối ưu cho việc phát hiện khuôn mặt"""
     try:
@@ -335,48 +934,110 @@ def scale_image_to_standard(image: np.ndarray, target_width: int = 480) -> np.nd
         print(f"Lỗi khi scale ảnh: {str(e)}")
         return image  # Trả về ảnh gốc nếu có lỗi
 
-def compare_faces(face1: np.ndarray, face2: np.ndarray) -> float:
-    """So sánh hai khuôn mặt và trả về độ tương đồng (cosine similarity)."""
+def compare_embeddings_enhanced(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+    """Bước 6: So sánh độ tương đồng bằng cosine similarity chuẩn"""
     try:
-        # Try embeddings if possible
-        emb1 = get_face_embedding(face1)
-        emb2 = get_face_embedding(face2)
-        if emb1 is not None and emb2 is not None:
-            similarity = float(np.dot(emb1, emb2))  # cosine similarity in [-1, 1]
-            print(f"Embedding cosine similarity: {similarity:.3f}")
-            return similarity
-
-        # Fallback: ORB + FLANN
-        gray1 = cv2.cvtColor(face1, cv2.COLOR_BGR2GRAY)
-        gray2 = cv2.cvtColor(face2, cv2.COLOR_BGR2GRAY)
-
-        orb = cv2.ORB_create(nfeatures=5000)
-        kp1, des1 = orb.detectAndCompute(gray1, None)
-        kp2, des2 = orb.detectAndCompute(gray2, None)
-
-        if des1 is None or des2 is None or len(kp1) == 0 or len(kp2) == 0:
-            print("Không tìm thấy đặc trưng để so sánh")
+        # Đảm bảo embeddings được normalize
+        norm1 = np.linalg.norm(embedding1)
+        norm2 = np.linalg.norm(embedding2)
+        
+        if norm1 == 0 or norm2 == 0:
+            print("Embedding có norm = 0")
             return -1.0
-
-        index_params = dict(algorithm=6, table_number=6, key_size=12, multi_probe_level=1)
-        search_params = dict(checks=50)
-        flann = cv2.FlannBasedMatcher(index_params, search_params)
-        matches = flann.knnMatch(des1, des2, k=2)
-
-        good_matches = []
-        for m, n in matches:
-            if m.distance < 0.75 * n.distance:
-                good_matches.append(m)
-
-        # Map ORB similarity to cosine scale [-1, 1]
-        orb_similarity = len(good_matches) / min(len(kp1), len(kp2))
-        similarity = 2.0 * orb_similarity - 1.0
-        print(f"ORB matches: {len(matches)}, Good: {len(good_matches)}, Mapped similarity: {similarity:.3f}")
-        return similarity
-
+        
+        emb1_normalized = embedding1 / norm1
+        emb2_normalized = embedding2 / norm2
+        
+        # Tính cosine similarity
+        cosine_sim = float(np.dot(emb1_normalized, emb2_normalized))
+        
+        # Clamp về range [-1, 1] để đảm bảo
+        cosine_sim = np.clip(cosine_sim, -1.0, 1.0)
+        
+        print(f"Cosine similarity: {cosine_sim:.4f}")
+        return cosine_sim
+        
     except Exception as e:
-        print(f"Error in compare_faces: {str(e)}")
+        print(f"Lỗi so sánh embeddings: {str(e)}")
         return -1.0
+
+def make_face_decision(similarity: float, threshold: float = 0.80) -> tuple:
+    """Bước 7: Ra quyết định dựa trên threshold"""
+    try:
+        is_same_person = similarity >= threshold
+        
+        if is_same_person:
+            confidence = similarity
+            message = f"Cùng người (similarity: {similarity:.3f} >= {threshold})"
+        else:
+            confidence = similarity
+            message = f"Khác người (similarity: {similarity:.3f} < {threshold})"
+        
+        print(f"Decision: {message}")
+        return is_same_person, confidence, message
+        
+    except Exception as e:
+        print(f"Lỗi ra quyết định: {str(e)}")
+        return False, 0.0, f"Lỗi: {str(e)}"
+
+def compare_faces_complete_workflow(image1: np.ndarray, image2: np.ndarray) -> dict:
+    """Quy trình hoàn chỉnh so sánh 2 khuôn mặt theo chuẩn InsightFace + OpenCV"""
+    try:
+        print("=== BẮT ĐẦU QUY TRÌNH SO SÁNH KHUÔN MẶT ===")
+        
+        # Bước 2: Tiền xử lý ảnh
+        print("Bước 2: Tiền xử lý ảnh...")
+        _, processed_img1 = preprocess_image(image1)
+        _, processed_img2 = preprocess_image(image2)
+        
+        # Bước 3: Phát hiện khuôn mặt
+        print("Bước 3: Phát hiện khuôn mặt...")
+        faces1 = detect_faces_insightface(processed_img1)
+        faces2 = detect_faces_insightface(processed_img2)
+        
+        if len(faces1) == 0:
+            return {"success": False, "message": "Không tìm thấy khuôn mặt trong ảnh 1", "similarity": -1.0}
+        
+        if len(faces2) == 0:
+            return {"success": False, "message": "Không tìm thấy khuôn mặt trong ảnh 2", "similarity": -1.0}
+        
+        # Chọn khuôn mặt lớn nhất từ mỗi ảnh
+        face1_info = max(faces1, key=lambda f: f[2] * f[3])  # w * h
+        face2_info = max(faces2, key=lambda f: f[2] * f[3])
+        
+        # Bước 5: Trích xuất đặc trưng
+        print("Bước 5: Trích xuất đặc trưng...")
+        embedding1 = extract_face_embedding_enhanced(processed_img1, face1_info)
+        embedding2 = extract_face_embedding_enhanced(processed_img2, face2_info)
+        
+        if embedding1 is None:
+            return {"success": False, "message": "Không thể trích xuất embedding từ ảnh 1", "similarity": -1.0}
+        
+        if embedding2 is None:
+            return {"success": False, "message": "Không thể trích xuất embedding từ ảnh 2", "similarity": -1.0}
+        
+        # Bước 6: So sánh độ tương đồng
+        print("Bước 6: So sánh độ tương đồng...")
+        similarity = compare_embeddings_enhanced(embedding1, embedding2)
+        
+        # Bước 7: Ra quyết định
+        print("Bước 7: Ra quyết định...")
+        is_same, confidence, message = make_face_decision(similarity, COSINE_THRESHOLD)
+        
+        print("=== KẾT THÚC QUY TRÌNH SO SÁNH ===")
+        
+        return {
+            "success": True,
+            "is_same_person": is_same,
+            "similarity": similarity,
+            "confidence": confidence,
+            "message": message,
+            "threshold": COSINE_THRESHOLD
+        }
+        
+    except Exception as e:
+        print(f"Lỗi trong quy trình so sánh: {str(e)}")
+        return {"success": False, "message": f"Lỗi: {str(e)}", "similarity": -1.0}
 
 @app.post("/face-recognition/verify")
 async def verify_face(
@@ -391,8 +1052,9 @@ async def verify_face(
         # Xử lý ảnh upload
         image = process_uploaded_image(face_image)
         
-        # Phát hiện khuôn mặt
-        faces = detect_faces(image)
+        # Bước 2 & 3: Tiền xử lý và phát hiện khuôn mặt theo quy trình chuẩn
+        _, processed_image = preprocess_image(image)
+        faces = detect_faces_insightface(processed_image)
         
         if len(faces) == 0:
             return {
@@ -410,69 +1072,50 @@ async def verify_face(
                 "employee_id": employee_id
             }
         
-        # Trích xuất khuôn mặt
-        face_coords = faces[0]
-        current_embedding = get_face_embedding(image, face_coords)
+        # Bước 4: Áp dụng chuẩn hóa màu da trước khi trích xuất features
+        face_info = faces[0]
+        face_obj = face_info[4] if len(face_info) > 4 else None
         
-        if current_embedding is None:
+        # Chuẩn hóa màu da trên ảnh gốc (không phải processed_image)
+        normalized_image = normalize_skin_tone(image, face_info[:4], face_obj)
+        
+        # Tiền xử lý ảnh đã chuẩn hóa
+        _, normalized_processed_image = preprocess_image(normalized_image)
+        
+        # Trích xuất Canny feature points từ ảnh đã chuẩn hóa
+        current_features = extract_canny_feature_points(normalized_processed_image, face_obj, face_info[:4])
+        
+        # Kiểm tra xem nhân viên đã đăng ký Canny features chưa
+        stored_features = load_employee_canny_features(employee_id)
+        
+        if stored_features is None:
             return {
                 "success": False,
-                "message": "Không thể trích xuất embedding từ ảnh",
+                "message": "Nhân viên chưa đăng ký khuôn mặt. Vui lòng đăng ký trước",
                 "confidence": 0.0,
                 "employee_id": employee_id
             }
         
-        # Kiểm tra xem nhân viên đã đăng ký chưa
-        stored_embeddings = load_employee_embeddings(employee_id)
+        # So sánh Canny feature points
+        similarity = compare_canny_features(current_features, stored_features, threshold=0.1)
         
-        if stored_embeddings is None:
-            # Nếu chưa có embedding, thử lấy ảnh khuôn mặt đã đăng ký và tạo embedding từ đó
-            registered_face = load_employee_face(employee_id)
-            if registered_face is not None:
-                # Thử trích xuất embedding trực tiếp
-                registered_embedding = get_face_embedding(registered_face)
-                # Nếu thất bại, thử lại với bbox phủ toàn ảnh đã cắt
-                if registered_embedding is None:
-                    try:
-                        h, w = registered_face.shape[:2]
-                        registered_embedding = get_face_embedding(registered_face, (0, 0, w, h))
-                    except Exception:
-                        registered_embedding = None
-                if registered_embedding is not None:
-                    # Lưu embedding lần đầu
-                    save_employee_embedding(employee_id, registered_embedding)
-                    stored_embeddings = load_employee_embeddings(employee_id)
-            # Nếu vẫn không tạo được từ ảnh đăng ký, khởi tạo bằng embedding hiện tại
-            if stored_embeddings is None and current_embedding is not None:
-                save_employee_embedding(employee_id, current_embedding)
-                stored_embeddings = load_employee_embeddings(employee_id)
-            if stored_embeddings is None:
-                return {
-                    "success": False,
-                    "message": "Nhân viên chưa đăng ký khuôn mặt. Vui lòng đăng ký trước",
-                    "confidence": 0.0,
-                    "employee_id": employee_id
-                }
+        print(f"Canny feature comparison — similarity: {similarity:.3f}")
         
-        # Tính cosine similarity với tất cả embeddings đã lưu
-        sims = stored_embeddings @ current_embedding
-        max_sim = float(np.max(sims))
-        avg_sim = float(np.mean(sims))
+        # Threshold cho Canny feature similarity (có thể điều chỉnh)
+        CANNY_THRESHOLD = 0.2
         
-        print(f"Face verification — avg: {avg_sim:.3f}, max: {max_sim:.3f}, samples: {stored_embeddings.shape[0]}")
-        
-        if max_sim >= COSINE_THRESHOLD:
+        if similarity >= CANNY_THRESHOLD:
             return {
                 "success": True,
                 "message": f"{action.capitalize()} thành công",
-                "confidence": max_sim,
+                "confidence": similarity,
                 "employee_id": employee_id
             }
         else:
             return {
                 "success": False,
-                "message": f"Khuôn mặt không khớp với nhân viên (max cosine: {max_sim:.3f})",
-                "confidence": max_sim,
+                "message": f"Khuôn mặt không khớp với nhân viên (similarity: {similarity:.3f})",
+                "confidence": similarity,
                 "employee_id": employee_id
             }
             
@@ -526,11 +1169,8 @@ async def register_employee_face(
         
         print(f"Image validation passed: {aspect_msg}, {bg_msg}")
         
-        # Scale ảnh về kích thước chuẩn để tối ưu phát hiện khuôn mặt
-        image = scale_image_to_standard(image)
-        
-        # Phát hiện khuôn mặt
-        faces = detect_faces(image)
+        # Phát hiện khuôn mặt trực tiếp trên ảnh gốc (không resize)
+        faces = detect_faces_insightface(image)
         
         if len(faces) == 0:
             return {
@@ -545,24 +1185,28 @@ async def register_employee_face(
                 "confidence": 0.0
             }
         
-        # Trích xuất khuôn mặt
-        face_coords = faces[0]
-        face_roi = extract_face_features(image, face_coords)
+        # Bước 4: Áp dụng chuẩn hóa màu da trước khi trích xuất features
+        face_info = faces[0]
+        face_obj = face_info[4] if len(face_info) > 4 else None
         
-        # Lưu ảnh khuôn mặt, KHÔNG lưu embedding ở bước đăng ký
-        save_employee_face(employee_id, face_roi)
+        # Chuẩn hóa màu da trên ảnh gốc
+        normalized_image = normalize_skin_tone(image, face_info[:4], face_obj)
         
-        # Thử tạo và lưu embedding luôn để lần xác thực đầu tiên không bị thiếu
-        try:
-            initial_embedding = get_face_embedding(image, face_coords)
-            if initial_embedding is None:
-                # Thử lại với toàn bộ ảnh đã cắt (ROI 128x128)
-                h, w = face_roi.shape[:2]
-                initial_embedding = get_face_embedding(face_roi, (0, 0, w, h))
-            if initial_embedding is not None:
-                save_employee_embedding(employee_id, initial_embedding)
-        except Exception as _e:
-            print(f"Không thể tạo embedding khi đăng ký cho employee {employee_id}: {_e}")
+        # Trích xuất Canny feature points từ ảnh đã chuẩn hóa
+        canny_features = extract_canny_feature_points(normalized_image, face_obj, face_info[:4])
+        
+        if canny_features is None:
+            return {
+                "success": False,
+                "message": "Không thể trích xuất đặc trưng khuôn mặt từ ảnh"
+            }
+        
+        # Lưu Canny feature points
+        save_employee_canny_features(employee_id, canny_features)
+        
+        # Cắt và lưu chỉ vùng khuôn mặt từ ảnh gốc (không phải ảnh đã resize)
+        face_region = extract_face_region_only(image, face_info[:4], margin_ratio=0.05)
+        save_employee_face(employee_id, face_region)
         
         return {
             "success": True, 
@@ -597,7 +1241,17 @@ async def delete_employee_face(employee_id: int):
             except Exception as e:
                 errors.append(f"Cannot delete face image: {str(e)}")
         
-        # Xóa embedding
+        # Xóa Canny features
+        features_path = os.path.join("employee_canny_features", f"employee_{employee_id}_features.npy")
+        if os.path.exists(features_path):
+            try:
+                os.remove(features_path)
+                deleted_files.append(f"employee_{employee_id}_features.npy")
+                print(f"Deleted Canny features: {features_path}")
+            except Exception as e:
+                errors.append(f"Cannot delete Canny features: {str(e)}")
+        
+        # Xóa embedding (legacy - có thể bỏ sau)
         embedding_path = _employee_embedding_path(employee_id)
         if os.path.exists(embedding_path):
             try:
@@ -699,14 +1353,15 @@ async def backfill_embeddings():
                 if img is None:
                     failed.append({"file": f, "reason": "cannot read"})
                     continue
-                faces = detect_faces(img)
+                # Sử dụng quy trình chuẩn để tạo embedding
+                _, processed_img = preprocess_image(img)
+                faces = detect_faces_insightface(processed_img)
                 emb = None
                 if len(faces) > 0:
-                    emb = get_face_embedding(img, faces[0])
+                    emb = extract_face_embedding_enhanced(processed_img, faces[0])
                 if emb is None:
-                    # Thử toàn bộ ảnh
-                    h, w = img.shape[:2]
-                    emb = get_face_embedding(img, (0, 0, w, h))
+                    # Fallback với phương pháp cũ
+                    emb = get_face_embedding(img, (0, 0, img.shape[1], img.shape[0]))
                 if emb is None:
                     failed.append({"file": f, "reason": "no embedding"})
                     continue
@@ -724,6 +1379,64 @@ async def backfill_embeddings():
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+@app.post("/face-recognition/compare")
+async def compare_two_faces(
+    face_image1: UploadFile = File(...),
+    face_image2: UploadFile = File(...)
+):
+    """API endpoint để test quy trình so sánh 2 khuôn mặt hoàn chỉnh"""
+    try:
+        print("=== TESTING COMPLETE FACE COMPARISON WORKFLOW ===")
+        
+        # Xử lý 2 ảnh upload
+        image1 = process_uploaded_image(face_image1)
+        image2 = process_uploaded_image(face_image2)
+        
+        # Chạy quy trình so sánh hoàn chỉnh
+        result = compare_faces_complete_workflow(image1, image2)
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error in compare_two_faces: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Lỗi xử lý: {str(e)}",
+            "similarity": -1.0
+        }
+
+@app.get("/face-recognition/info")
+async def get_api_info():
+    """Thông tin về API và quy trình xử lý"""
+    return {
+        "api_name": "Face Recognition API",
+        "version": "2.0.0",
+        "workflow": {
+            "step_1": "Chuẩn bị và khởi tạo (InsightFace buffalo_l model)",
+            "step_2": "Tiền xử lý ảnh (resize, normalize, color conversion)",
+            "step_3": "Phát hiện khuôn mặt (InsightFace RetinaFace)",
+            "step_4": "Căn chỉnh khuôn mặt (facial landmarks alignment)",
+            "step_5": "Trích xuất đặc trưng (ArcFace embedding 512-dim)",
+            "step_6": "So sánh độ tương đồng (cosine similarity)",
+            "step_7": "Ra quyết định (threshold-based decision)"
+        },
+        "features": {
+            "face_detection": "InsightFace RetinaFace + OpenCV Haar (fallback)",
+            "face_alignment": "Facial landmarks-based affine transformation",
+            "embedding_model": "ArcFace (buffalo_l)",
+            "similarity_metric": "Cosine similarity",
+            "threshold": COSINE_THRESHOLD,
+            "image_validation": "3:4 aspect ratio + solid background"
+        },
+        "endpoints": {
+            "/face-recognition/register": "Đăng ký khuôn mặt nhân viên",
+            "/face-recognition/verify": "Xác thực khuôn mặt check-in/out",
+            "/face-recognition/compare": "So sánh 2 khuôn mặt (test)",
+            "/face-recognition/health": "Kiểm tra trạng thái API",
+            "/face-recognition/info": "Thông tin API và workflow"
+        }
+    }
 
 if __name__ == "__main__":
     import uvicorn

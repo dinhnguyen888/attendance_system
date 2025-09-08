@@ -7,12 +7,10 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='worked_hours']" position="after">
                 <field name="check_in_image" widget="image" options="{'size': [200, 200]}" readonly="1"/>
-                <field name="check_in_confidence" widget="percentage" readonly="1"/>
                 <field name="check_in_message" readonly="1"/>
                 <field name="check_in_wifi_ip" readonly="1"/>
                 <field name="check_in_wifi_validated" readonly="1"/>
                 <field name="check_out_image" widget="image" options="{'size': [200, 200]}" readonly="1" invisible="not check_out"/>
-                <field name="check_out_confidence" widget="percentage" readonly="1" invisible="not check_out"/>
                 <field name="check_out_message" readonly="1" invisible="not check_out"/>
                 <field name="check_out_wifi_ip" readonly="1" invisible="not check_out"/>
                 <field name="check_out_wifi_validated" readonly="1" invisible="not check_out"/>
@@ -39,11 +37,9 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='worked_hours']" position="after">
                 <!-- Thông tin check-in -->
-                <field name="check_in_confidence" widget="percentage" optional="show" string="Độ tin cậy check-in"/>
                 <field name="check_in_wifi_validated" optional="show" string="WiFi check-in hợp lệ"/>
                 
                 <!-- Thông tin check-out -->
-                <field name="check_out_confidence" widget="percentage" optional="show" string="Độ tin cậy check-out"/>
                 <field name="check_out_wifi_validated" optional="show" string="WiFi check-out hợp lệ"/>
                 
                 <!-- Giữ lại trường cũ để tương thích ngược -->
