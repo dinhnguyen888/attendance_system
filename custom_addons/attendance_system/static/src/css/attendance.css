@@ -191,3 +191,35 @@
         margin-top: 10px;
     }
 }
+/* Fixed Face Image Sizing - Consistent across all views */
+.o_list_view td.o_data_cell.oe_avatar.fixed_face_img img,
+.o_list_view td.o_data_cell.oe_avatar img {
+    width: 100px !important;
+    height: 100px !important;
+    object-fit: cover !important;
+    border-radius: 4px !important;
+}
+
+/* Form view face images */
+.o_form_view .oe_avatar img {
+    width: 250px !important;
+    height: 250px !important;
+    object-fit: cover !important;
+    border-radius: 8px !important;
+}
+
+/* Face Recognition tab images */
+.o_form_view .o_field_widget.o_field_image.oe_avatar img {
+    width: 250px !important;
+    height: 250px !important;
+    object-fit: cover !important;
+    border-radius: 8px !important;
+}
+
+/* Tree view in employee face management */
+.o_list_view .o_field_widget.o_field_image img {
+    width: 80px !important;
+    height: 80px !important;
+    object-fit: cover !important;
+    border-radius: 4px !important;
+}

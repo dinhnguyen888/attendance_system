@@ -583,8 +583,7 @@
                             }
                             const result = data && data.result ? data.result : null;
                             if (result && result.success) {
-                                const conf = typeof result.confidence === 'number' ? ` (confidence: ${result.confidence.toFixed(2)})` : '';
-                                showResult('✅ Check-in successful' + conf + '!', 'success');
+                                showResult('✅ Check-in successful!', 'success');
                                 imageData = null;
                                 setTimeout(() => { resetCamera(); }, 2000);
                             } else {
@@ -626,8 +625,7 @@
                             }
                             const result = data && data.result ? data.result : null;
                             if (result && result.success) {
-                                const conf = typeof result.confidence === 'number' ? ` (confidence: ${result.confidence.toFixed(2)})` : '';
-                                showResult('✅ Check-out successful' + conf + '!', 'success');
+                                showResult('✅ Check-out successful!', 'success');
                                 imageData = null;
                                 setTimeout(() => { resetCamera(); }, 2000);
                             } else {

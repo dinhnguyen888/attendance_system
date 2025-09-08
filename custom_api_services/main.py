@@ -1102,7 +1102,7 @@ async def verify_face(
         print(f"Canny feature comparison — similarity: {similarity:.3f}")
         
         # Threshold cho Canny feature similarity (có thể điều chỉnh)
-        CANNY_THRESHOLD = 0.3
+        CANNY_THRESHOLD = 0.2
         
         if similarity >= CANNY_THRESHOLD:
             return {
