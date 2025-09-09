@@ -1,15 +1,72 @@
 # Face Attendance System
 
-Hệ thống điểm danh bằng khuôn mặt tích hợp với Odoo, sử dụng OpenCV để xác thực khuôn mặt.
+Hệ thống điểm danh bằng khuôn mặt tích hợp với Odoo, sử dụng AI và Computer Vision để xác thực khuôn mặt với độ chính xác cao.
+
+## Công nghệ sử dụng
+
+### Backend Technologies
+- **Odoo 16+** - ERP framework chính cho quản lý nhân sự và điểm danh
+- **Python 3.8+** - Ngôn ngữ lập trình chính
+- **PostgreSQL 13** - Cơ sở dữ liệu chính
+- **FastAPI 0.104.1** - Web framework cho Face Recognition API
+- **Uvicorn** - ASGI server cho FastAPI
+
+### Face Recognition & AI
+- **InsightFace 0.7.3** - Thư viện AI nhận diện khuôn mặt tiên tiến
+- **OpenCV 4.8.1** - Computer Vision cho xử lý ảnh và video
+- **ONNX Runtime 1.18.1** - Runtime cho các mô hình AI
+- **NumPy 1.24.3** - Xử lý mảng và tính toán khoa học
+- **Scikit-image 0.21.0** - Xử lý ảnh nâng cao
+
+### Frontend Technologies
+- **Odoo Web Framework** - Giao diện web tích hợp sẵn trong Odoo
+- **HTML5/CSS3/JavaScript** - Frontend templates và static files
+- **WebRTC** - Truy cập camera trực tiếp từ trình duyệt
+- **Odoo QWeb Templates** - Template engine của Odoo
+
+### Mobile Technologies (Flutter App)
+- **Flutter 3.1.0+** - Cross-platform mobile framework
+- **Dart** - Ngôn ngữ lập trình cho Flutter
+- **Camera Plugin 0.10.5** - Truy cập camera trên mobile
+- **HTTP 1.1.0** - HTTP client cho API calls
+- **Provider 6.1.1** - State management
+- **Shared Preferences 2.2.2** - Local storage
+- **Flutter Secure Storage 9.0.0** - Secure data storage
+- **Permission Handler 11.0.1** - Quản lý quyền truy cập
+
+### DevOps & Infrastructure
+- **Docker & Docker Compose** - Containerization và orchestration
+- **Git** - Version control system
+
+
+### Advanced Features
+- **Multiple Face Registration** - Đăng ký nhiều góc chụp
+- **Skin Tone Normalization** - Chuẩn hóa màu da
+- **Background Validation** - Kiểm tra nền ảnh
+- **Face Quality Enhancement** - Tăng chất lượng ảnh khuôn mặt
+- **Embedding Diversity Analysis** - Phân tích độ đa dạng đặc trưng
+- **Real-time Processing** - Xử lý thời gian thực
 
 ## Kiến trúc hệ thống
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Odoo Controller│    │  Face Recognition│
-│   (Webcam UI)   │───▶│   (Odoo Addon)   │───▶│   API Service   │
-│                 │    │                  │    │   (OpenCV)      │
+│   Web Frontend  │    │   Odoo ERP       │    │  Face Recognition│
+│   (WebRTC UI)   │───▶│   Controller     │───▶│   API Service   │
+│                 │    │   (Python)       │    │   (FastAPI+AI)  │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                       │                       │
+         │              ┌──────────────────┐             │
+         │              │   PostgreSQL     │             │
+         └──────────────│   Database       │─────────────┘
+                        │   (Odoo Data)    │
+                        └──────────────────┘
+                                 │
+                        ┌──────────────────┐
+                        │   Mobile App     │
+                        │   (Flutter)      │
+                        │   REST API       │
+                        └──────────────────┘
 ```
 
 ## Luồng hoạt động
@@ -18,10 +75,12 @@ Hệ thống điểm danh bằng khuôn mặt tích hợp với Odoo, sử dụn
 2. **Chụp ảnh khuôn mặt**: Nhân viên chụp ảnh khuôn mặt qua webcam
 3. **Gửi ảnh về Controller**: Frontend gửi ảnh về Odoo controller
 4. **Gọi API Face Recognition**: Controller gọi API service để xác thực khuôn mặt
-5. **Xử lý bằng OpenCV**: API service sử dụng OpenCV để:
-   - Phát hiện khuôn mặt trong ảnh
-   - So sánh với ảnh đã lưu (nếu có)
-   - Trả về kết quả xác thực
+5. **Xử lý bằng AI**: API service sử dụng InsightFace và OpenCV để:
+   - Phát hiện và chuẩn hóa khuôn mặt trong ảnh
+   - Trích xuất embedding vector từ khuôn mặt
+   - So sánh với các embedding đã lưu (hỗ trợ nhiều ảnh)
+   - Áp dụng các bộ lọc chất lượng và validation
+   - Trả về kết quả xác thực với confidence score
 6. **Lưu attendance**: Nếu xác thực thành công, lưu bản ghi attendance vào Odoo
 
 ## Cài đặt và chạy
@@ -137,10 +196,13 @@ Kiểm tra trạng thái API face recognition
 ## Tính năng
 
 ### Face Recognition
-- Phát hiện khuôn mặt sử dụng Haar Cascade
-- Trích xuất đặc trưng sử dụng ORB
-- So sánh khuôn mặt với độ chính xác cao
-- Lưu trữ ảnh khuôn mặt cho từng nhân viên
+- Phát hiện khuôn mặt sử dụng InsightFace AI models
+- Trích xuất embedding vectors với độ chính xác cao
+- Hỗ trợ đăng ký nhiều ảnh từ các góc khác nhau
+- Chuẩn hóa màu da và tăng chất lượng ảnh
+- Kiểm tra nền ảnh và tỷ lệ khung hình (3:4)
+- So sánh khuôn mặt với cosine similarity
+- Lưu trữ multiple embeddings cho mỗi nhân viên
 
 ### Security
 - Xác thực người dùng Odoo
@@ -173,28 +235,8 @@ Kiểm tra trạng thái API face recognition
 
 ## Development
 
-### Cấu trúc thư mục
-```
-attendance_system/
-├── custom_addons/
-│   └── attendance_system/
-│       ├── controllers/
-│       ├── models/
-│       ├── views/
-│       └── __manifest__.py
-├── custom_api_services/
-│   ├── main.py
-│   ├── requirements.txt
-│   └── Dockerfile
-├── docker-compose.yml
-└── README.md
-```
 
-### Thêm tính năng mới
-1. Cập nhật API service trong `custom_api_services/main.py`
-2. Cập nhật controller trong `custom_addons/attendance_system/controllers/`
-3. Cập nhật frontend trong `custom_addons/attendance_system/views/`
-4. Test và deploy
+
 
 ## License
 
