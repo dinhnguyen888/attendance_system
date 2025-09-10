@@ -29,6 +29,11 @@
 
 Hệ thống điểm danh bằng khuôn mặt tích hợp với Odoo, sử dụng AI và Computer Vision để xác thực khuôn mặt với độ chính xác cao.
 
+## Links
+
+- 🌐 **Demo Website**: [https://attendance-system.ddns.net](https://attendance-system.ddns.net)
+
+
 ## Công nghệ sử dụng
 
 ### Backend Technologies
