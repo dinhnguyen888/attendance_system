@@ -25,6 +25,15 @@ async def register_employee_face(
     """Register employee face with validation and feature extraction"""
     return face_service.register_employee_face(employee_id, face_image, action)
 
+@router.post("/face-recognition/register-augmented")
+async def register_employee_face_augmented(
+    employee_id: int = Form(...),
+    action: str = Form(...),
+    face_image: UploadFile = File(...)
+) -> Dict[str, Any]:
+    """Enhanced registration from 3x4 photo with augmentation pipeline"""
+    return face_service.register_employee_face_augmented(employee_id, face_image, action)
+
 @router.post("/face-recognition/verify")
 async def verify_face(
     face_image: UploadFile = File(...),
@@ -33,6 +42,15 @@ async def verify_face(
 ) -> Dict[str, Any]:
     """Verify face for check-in/check-out"""
     return face_service.verify_employee_face(employee_id, face_image, action)
+
+@router.post("/face-recognition/verify-max-similarity")
+async def verify_face_max_similarity(
+    face_image: UploadFile = File(...),
+    action: str = Form(...),
+    employee_id: int = Form(...)
+) -> Dict[str, Any]:
+    """Enhanced verification using max similarity with multiple embeddings"""
+    return face_service.verify_employee_face_max_similarity(employee_id, face_image, action)
 
 @router.post("/face-recognition/compare")
 async def compare_two_faces(

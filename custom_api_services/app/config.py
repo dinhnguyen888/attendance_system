@@ -10,11 +10,22 @@ API_VERSION = "2.0.0"
 # Directory paths
 EMPLOYEE_FACES_DIR = "employee_faces"
 EMPLOYEE_CANNY_FEATURES_DIR = "employee_canny_features"
+EMPLOYEE_EMBEDDINGS_DIR = "employee_embeddings"
 
-# Face recognition thresholds
-COSINE_THRESHOLD = 0.7
-CANNY_THRESHOLD = 0.2
-MAX_EMBEDDINGS_PER_EMPLOYEE = 5
+# Face recognition thresholds (optimized based on actual performance)
+ARCFACE_THRESHOLD = 0.6   # Primary ArcFace embedding threshold (realistic for same person)
+LBP_ORB_THRESHOLD = 0.45  # Backup LBP+ORB threshold (lower due to method limitations)
+CANNY_THRESHOLD = 0.15    # Backup Canny threshold (lower for edge features)
+COSINE_THRESHOLD = 0.6    # Legacy compatibility (same as ARCFACE_THRESHOLD)
+MAX_EMBEDDINGS_PER_EMPLOYEE = 8  # Increased for augmented enrollment
+
+# Confidence thresholds for method selection (adjusted for realistic performance)
+HIGH_CONFIDENCE_THRESHOLD = 0.7  # Use ArcFace only if above this
+LOW_CONFIDENCE_THRESHOLD = 0.35  # Use backup methods if below this
+
+# Augmentation settings
+NUM_AUGMENTATIONS = 8     # Number of augmented variations to generate
+MIN_QUALITY_SCORE = 0.4   # Minimum quality score for enrollment
 
 # Image validation settings
 ASPECT_RATIO_3_4 = 3.0 / 4.0

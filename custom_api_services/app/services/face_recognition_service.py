@@ -25,6 +25,26 @@ from app.config import CANNY_THRESHOLD, COSINE_THRESHOLD
 class FaceRecognitionService:
     """Main service for face recognition operations"""
     
+    def register_employee_face_augmented(self, employee_id: int, face_image_file, action: str) -> Dict[str, Any]:
+        """Enhanced registration using augmented enrollment pipeline"""
+        try:
+            from app.core.enrollment_pipeline import enroll_employee_from_3x4
+            
+            # Read and validate image
+            image_array = np.frombuffer(face_image_file.read(), np.uint8)
+            image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+            
+            if image is None:
+                return {"success": False, "message": "Không thể đọc file ảnh"}
+            
+            # Use enhanced enrollment pipeline
+            result = enroll_employee_from_3x4(employee_id, image)
+            return result
+            
+        except Exception as e:
+            print(f"Error in augmented registration: {str(e)}")
+            return {"success": False, "message": f"Lỗi đăng ký: {str(e)}"}
+
     def register_employee_face(self, employee_id: int, face_image_file, action: str) -> Dict[str, Any]:
         """Register employee face with validation and feature extraction"""
         try:
@@ -74,17 +94,52 @@ class FaceRecognitionService:
             # Normalize skin tone on original image
             normalized_image = normalize_skin_tone(image, face_info[:4], face_obj)
             
-            # Extract Canny feature points from normalized image
+            # Extract ArcFace embedding (primary method)
+            arcface_embedding = extract_face_embedding_enhanced(normalized_image, face_info)
+            
+            if arcface_embedding is None:
+                print(f"Primary ArcFace extraction failed for employee {employee_id}")
+                # Try simple embedding extraction as fallback
+                try:
+                    x, y, w, h = face_info[:4]
+                    face_crop = normalized_image[y:y+h, x:x+w]
+                    from app.core.face_embeddings import get_face_embedding
+                    arcface_embedding = get_face_embedding(face_crop)
+                    if arcface_embedding is not None:
+                        print(f"Fallback ArcFace extraction successful: {arcface_embedding.shape}")
+                except Exception as fallback_error:
+                    print(f"Fallback ArcFace extraction error: {str(fallback_error)}")
+                    arcface_embedding = None
+            
+            # Extract LBP+ORB features (backup method)
+            from app.core.lbp_orb_features import extract_lbp_orb_combined
+            from app.core.file_operations import save_employee_lbp_orb_features
+            
+            lbp_orb_features = extract_lbp_orb_combined(normalized_image, face_info[:4])
+            
+            # Extract Canny features (auxiliary method - demoted)
             canny_features = extract_canny_feature_points(normalized_image, face_obj, face_info[:4])
             
-            if canny_features is None:
+            # Save all available features
+            if arcface_embedding is not None:
+                from app.core.face_embeddings import save_employee_embedding
+                save_employee_embedding(employee_id, arcface_embedding)
+                print(f"ArcFace embedding saved for employee {employee_id}")
+            
+            if lbp_orb_features is not None:
+                save_employee_lbp_orb_features(employee_id, lbp_orb_features)
+                print(f"LBP+ORB features saved for employee {employee_id}")
+            
+            if canny_features is not None:
+                save_employee_canny_features(employee_id, canny_features)
+                print(f"Canny features saved for employee {employee_id}")
+            
+            # Check if we have at least one method available
+            if arcface_embedding is None and lbp_orb_features is None and canny_features is None:
                 return {
                     "success": False,
-                    "message": "Không thể trích xuất đặc trưng khuôn mặt từ ảnh"
+                    "message": "Không thể trích xuất bất kỳ đặc trưng nào từ khuôn mặt. Vui lòng thử lại với ảnh chất lượng tốt hơn."
                 }
-            
-            # Save Canny feature points
-            save_employee_canny_features(employee_id, canny_features)
             
             # Crop and save only face region from original image (not resized)
             face_region = extract_face_region_only(image, face_info[:4], margin_ratio=0.05)
@@ -106,6 +161,26 @@ class FaceRecognitionService:
                 "employee_id": None
             }
     
+    def verify_employee_face_max_similarity(self, employee_id: int, face_image_file, action: str) -> Dict[str, Any]:
+        """Enhanced verification using max similarity with multiple embeddings"""
+        try:
+            from app.core.enrollment_pipeline import verify_with_max_similarity
+            
+            # Read and validate image
+            image_array = np.frombuffer(face_image_file.read(), np.uint8)
+            image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+            
+            if image is None:
+                return {"success": False, "message": "Không thể đọc file ảnh"}
+            
+            # Use enhanced verification pipeline
+            result = verify_with_max_similarity(employee_id, image)
+            return result
+            
+        except Exception as e:
+            print(f"Error in max similarity verification: {str(e)}")
+            return {"success": False, "message": f"Lỗi xác thực: {str(e)}"}
+
     def verify_employee_face(self, employee_id: int, face_image_file, action: str) -> Dict[str, Any]:
         """Verify employee face for check-in/check-out"""
         try:
@@ -141,40 +216,148 @@ class FaceRecognitionService:
             # Normalize skin tone on original image (not processed_image)
             normalized_image = normalize_skin_tone(image, face_info[:4], face_obj)
             
-            # Preprocess normalized image
+            # Extract ArcFace embedding (primary method)
+            current_arcface = extract_face_embedding_enhanced(normalized_image, face_info)
+            
+            if current_arcface is None:
+                print(f"Primary ArcFace extraction failed for verification of employee {employee_id}")
+                # Try simple embedding extraction as fallback
+                try:
+                    x, y, w, h = face_info[:4]
+                    face_crop = normalized_image[y:y+h, x:x+w]
+                    from app.core.face_embeddings import get_face_embedding
+                    current_arcface = get_face_embedding(face_crop)
+                    if current_arcface is not None:
+                        print(f"Fallback ArcFace extraction successful for verification")
+                except Exception as fallback_error:
+                    print(f"Fallback ArcFace extraction error: {str(fallback_error)}")
+                    current_arcface = None
+            
+            # Extract LBP+ORB features (backup method)
+            from app.core.lbp_orb_features import extract_lbp_orb_combined, compare_lbp_orb_combined
+            from app.core.file_operations import load_employee_lbp_orb_features
+            
+            current_lbp_orb = extract_lbp_orb_combined(normalized_image, face_info[:4])
+            
+            # Load stored features
+            from app.core.face_embeddings import load_employee_embeddings
+            stored_arcface = load_employee_embeddings(employee_id)
+            stored_lbp_orb = load_employee_lbp_orb_features(employee_id)
+            
+            # Initialize scoring variables
+            arcface_similarity = 0.0
+            lbp_orb_similarity = 0.0
+            final_confidence = 0.0
+            comparison_method = "No Method Available"
+            
+            # Primary method: ArcFace comparison
+            if current_arcface is not None and stored_arcface is not None and len(stored_arcface) > 0:
+                arcface_similarity = compare_embeddings_enhanced(current_arcface, stored_arcface[0])
+                print(f"ArcFace comparison — similarity: {arcface_similarity:.3f}")
+                
+                # Check if ArcFace confidence is high enough to use alone
+                from app.config import HIGH_CONFIDENCE_THRESHOLD, ARCFACE_THRESHOLD
+                if arcface_similarity >= HIGH_CONFIDENCE_THRESHOLD:
+                    final_confidence = arcface_similarity
+                    comparison_method = "ArcFace (High Confidence)"
+                    print(f"Using ArcFace only (high confidence): {final_confidence:.3f}")
+                else:
+                    # ArcFace confidence is moderate, check backup methods
+                    comparison_method = "ArcFace"
+                    final_confidence = arcface_similarity
+            
+            # Backup method: LBP+ORB comparison (when ArcFace confidence is low or unavailable)
+            if current_lbp_orb is not None and stored_lbp_orb is not None:
+                lbp_orb_similarity = compare_lbp_orb_combined(current_lbp_orb, stored_lbp_orb)
+                print(f"LBP+ORB comparison — similarity: {lbp_orb_similarity:.3f}")
+                
+                if comparison_method == "ArcFace":
+                    # Combine ArcFace + LBP+ORB: 70% ArcFace + 30% LBP+ORB
+                    final_confidence = 0.7 * arcface_similarity + 0.3 * lbp_orb_similarity
+                    comparison_method = "ArcFace + LBP+ORB"
+                    print(f"Combined ArcFace+LBP+ORB confidence: {final_confidence:.3f}")
+                elif comparison_method == "No Method Available":
+                    # Use LBP+ORB only
+                    final_confidence = lbp_orb_similarity
+                    comparison_method = "LBP+ORB Only"
+                    print(f"Using LBP+ORB only: {final_confidence:.3f}")
+            
+            # Check if we need to fall back to auxiliary methods
+            from app.config import LOW_CONFIDENCE_THRESHOLD
+            if final_confidence < LOW_CONFIDENCE_THRESHOLD and comparison_method != "No Method Available":
+                print(f"Confidence too low ({final_confidence:.3f}), checking auxiliary methods")
+            
+            # MANDATORY: Always extract and compare Canny features at the end
             _, normalized_processed_image = preprocess_image(normalized_image)
-            
-            # Extract Canny feature points from normalized image
             current_features = extract_canny_feature_points(normalized_processed_image, face_obj, face_info[:4])
-            
-            # Check if employee has registered Canny features
             stored_features = load_employee_canny_features(employee_id)
             
-            if stored_features is None:
+            # Always check Canny features at the end (mandatory step)
+            canny_similarity = 0.0
+            canny_available = False
+            
+            if current_features is not None and stored_features is not None:
+                canny_similarity = compare_canny_features(current_features, stored_features, threshold=0.1)
+                canny_available = True
+                print(f"Canny MANDATORY check — similarity: {canny_similarity:.3f}")
+            else:
+                print("WARNING: Canny features not available - this reduces accuracy")
+            
+            # Apply Canny combination logic
+            if comparison_method == "No Method Available":
+                if canny_available:
+                    # Use Canny as only method
+                    final_confidence = canny_similarity
+                    comparison_method = "Canny Only"
+                    print(f"Using Canny only: {final_confidence:.3f}")
+                else:
+                    print("No features available for comparison")
+            else:
+                # ALWAYS combine with Canny when available - use simpler weighted average
+                if canny_available:
+                    # Simplified combination: 85% main method + 15% Canny (fixed weights)
+                    combined_confidence = 0.85 * final_confidence + 0.15 * canny_similarity
+                    weight_info = "85% main + 15% Canny"
+                    
+                    print(f"MANDATORY Canny combination ({weight_info}): {final_confidence:.3f} + {canny_similarity:.3f} -> {combined_confidence:.3f}")
+                    final_confidence = combined_confidence
+                    comparison_method += " + Canny"
+                else:
+                    # Canny features not available - small penalty
+                    final_confidence *= 0.95  # 5% penalty for missing Canny
+                    print(f"Canny unavailable - applying 5% penalty: {final_confidence:.3f}")
+                    comparison_method += " (No Canny)"
+            
+            # Check if no methods are available
+            if comparison_method == "No Method Available":
                 return {
                     "success": False,
-                    "message": "Nhân viên chưa đăng ký khuôn mặt. Vui lòng đăng ký trước",
+                    "message": "Nhân viên chưa đăng ký khuôn mặt hoặc không thể trích xuất đặc trưng. Vui lòng đăng ký lại",
                     "confidence": 0.0,
                     "employee_id": employee_id
                 }
             
-            # Compare Canny feature points
-            similarity = compare_canny_features(current_features, stored_features, threshold=0.1)
-            
-            print(f"Canny feature comparison — similarity: {similarity:.3f}")
-            
-            if similarity >= CANNY_THRESHOLD:
+            # Determine appropriate threshold based on comparison method
+            if "ArcFace" in comparison_method:
+                threshold = ARCFACE_THRESHOLD
+            elif "LBP+ORB" in comparison_method:
+                from app.config import LBP_ORB_THRESHOLD
+                threshold = LBP_ORB_THRESHOLD
+            else:
+                from app.config import CANNY_THRESHOLD
+                threshold = CANNY_THRESHOLD
+            if final_confidence >= threshold:
                 return {
                     "success": True,
-                    "message": f"{action.capitalize()} thành công",
-                    "confidence": similarity,
+                    "message": f"{action.capitalize()} thành công ({comparison_method})",
+                    "confidence": final_confidence,
                     "employee_id": employee_id
                 }
             else:
                 return {
                     "success": False,
-                    "message": f"Khuôn mặt không khớp với nhân viên (similarity: {similarity:.3f})",
-                    "confidence": similarity,
+                    "message": f"Khuôn mặt không khớp với nhân viên ({comparison_method} similarity: {final_confidence:.3f})",
+                    "confidence": final_confidence,
                     "employee_id": employee_id
                 }
                 

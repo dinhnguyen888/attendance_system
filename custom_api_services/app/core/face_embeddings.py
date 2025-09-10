@@ -3,11 +3,11 @@ Face embedding extraction and comparison using InsightFace
 """
 import cv2
 import numpy as np
-from typing import Optional, Tuple
 import os
+from typing import Optional, Tuple, Dict, Any, List
 from app.models.face_models import get_face_app
 from app.core.face_alignment import align_face, align_face_simple
-from app.config import EMPLOYEE_FACES_DIR, MAX_EMBEDDINGS_PER_EMPLOYEE, COSINE_THRESHOLD
+from app.config import EMPLOYEE_FACES_DIR, MAX_EMBEDDINGS_PER_EMPLOYEE, COSINE_THRESHOLD, EMPLOYEE_EMBEDDINGS_DIR
 
 def get_face_embedding(image: np.ndarray, face_coords: Optional[tuple] = None) -> Optional[np.ndarray]:
     """Compute a 512-dim normalized embedding using InsightFace. Returns None if unavailable/failure.
@@ -16,6 +16,7 @@ def get_face_embedding(image: np.ndarray, face_coords: Optional[tuple] = None) -
     """
     app = get_face_app()
     if app is None:
+        print("InsightFace model not available - cannot extract embeddings")
         return None
     try:
         roi_img = image
@@ -55,6 +56,15 @@ def extract_face_embedding_enhanced(image: np.ndarray, face_info: tuple) -> Opti
         app = get_face_app()
         if app is None:
             print("InsightFace không khả dụng, fallback to old method")
+            return None
+        
+        # Validate input image
+        if image is None or image.size == 0:
+            print("Input image is None or empty")
+            return None
+            
+        if len(face_info) < 4:
+            print(f"Invalid face_info: {face_info}")
             return None
         
         # Try 1: Face alignment with contour-based extraction
@@ -99,10 +109,9 @@ def extract_face_embedding_enhanced(image: np.ndarray, face_info: tuple) -> Opti
         except Exception as align_error:
             print(f"Face alignment failed: {str(align_error)}")
         
-        # Try 2: Use contour-based extraction directly
+        # Try 2: Simple direct extraction from original image
         try:
             x, y, w, h = face_info[:4]
-            face_obj = face_info[4] if len(face_info) > 4 else None
             
             # Convert image to BGR uint8 if needed
             if image.max() <= 1.0:
@@ -110,30 +119,31 @@ def extract_face_embedding_enhanced(image: np.ndarray, face_info: tuple) -> Opti
             else:
                 bgr_image = image.astype(np.uint8)
             
+            # Ensure BGR format for InsightFace
             if len(bgr_image.shape) == 3 and bgr_image.shape[2] == 3:
                 if np.mean(bgr_image[:, :, 0]) < np.mean(bgr_image[:, :, 2]):
                     bgr_image = cv2.cvtColor(bgr_image, cv2.COLOR_RGB2BGR)
             
-            # Use face segmentation if face object is available
-            if face_obj is not None:
-                segmented_face = extract_face_with_segmentation(bgr_image, face_obj, (x, y, w, h))
-                print(f"Segmented face extracted: {segmented_face.shape}")
-                
-                # Extract embedding from segmented face
-                faces = app.get(segmented_face)
-                if faces:
-                    face_obj_new = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
-                    embedding = face_obj_new.normed_embedding
-                    if embedding is not None:
-                        embedding = np.asarray(embedding, dtype=np.float32)
-                        norm = np.linalg.norm(embedding)
-                        if norm > 0:
-                            embedding = embedding / norm
-                        print(f"Segmentation embedding extracted: shape={embedding.shape}, norm={np.linalg.norm(embedding):.3f}")
-                        return embedding
+            print(f"Processing image: shape={bgr_image.shape}, dtype={bgr_image.dtype}, max={bgr_image.max()}")
             
-            # Fallback: regular crop
-            margin = 0.1
+            # Try direct detection on full image first
+            faces = app.get(bgr_image)
+            print(f"Direct detection found {len(faces)} faces")
+            
+            if faces:
+                # Choose face with largest bbox
+                face_obj_new = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+                embedding = face_obj_new.normed_embedding
+                if embedding is not None:
+                    embedding = np.asarray(embedding, dtype=np.float32)
+                    norm = np.linalg.norm(embedding)
+                    if norm > 0:
+                        embedding = embedding / norm
+                    print(f"Direct embedding extracted: shape={embedding.shape}, norm={np.linalg.norm(embedding):.3f}")
+                    return embedding
+            
+            # Fallback: regular crop with margin
+            margin = 0.2  # Increased margin for better context
             x_margin = int(w * margin)
             y_margin = int(h * margin)
             x1 = max(0, x - x_margin)
@@ -144,7 +154,14 @@ def extract_face_embedding_enhanced(image: np.ndarray, face_info: tuple) -> Opti
             face_crop = bgr_image[y1:y2, x1:x2]
             print(f"Face cropped (fallback): {face_crop.shape}")
             
+            # Validate crop size
+            if face_crop.shape[0] < 50 or face_crop.shape[1] < 50:
+                print(f"Face crop too small: {face_crop.shape}")
+                return None
+            
             faces = app.get(face_crop)
+            print(f"Cropped detection found {len(faces)} faces")
+            
             if faces:
                 face_obj_new = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
                 embedding = face_obj_new.normed_embedding
@@ -220,47 +237,100 @@ def make_face_decision(similarity: float, threshold: float = COSINE_THRESHOLD) -
 def _employee_embedding_path(employee_id: int) -> str:
     return os.path.join(EMPLOYEE_FACES_DIR, f"employee_{employee_id}.npy")
 
-def save_employee_embedding(employee_id: int, embedding: np.ndarray) -> None:
+def save_multiple_employee_embeddings(employee_id: int, embeddings: List[np.ndarray]) -> bool:
+    """Save multiple embeddings for an employee (augmented enrollment)"""
     try:
-        path = _employee_embedding_path(employee_id)
-        stacked: Optional[np.ndarray] = None
-        if os.path.exists(path):
-            try:
-                existing = np.load(path)
-                if existing.ndim == 1 and existing.shape[0] == embedding.shape[0]:
-                    stacked = np.stack([existing, embedding], axis=0)
-                elif existing.ndim == 2 and existing.shape[1] == embedding.shape[0]:
-                    stacked = np.vstack([existing, embedding[None, :]])
-                else:
-                    stacked = embedding[None, :]
-            except Exception as _e:
-                print(f"Không đọc được embeddings cũ cho employee {employee_id}: {_e}")
-                stacked = embedding[None, :]
-        else:
-            stacked = embedding[None, :]
-
-        # Keep maximum N recent embeddings
-        if stacked.shape[0] > MAX_EMBEDDINGS_PER_EMPLOYEE:
-            stacked = stacked[-MAX_EMBEDDINGS_PER_EMPLOYEE:, :]
-
-        np.save(path, stacked)
+        embeddings_dir = os.path.join(os.getcwd(), EMPLOYEE_EMBEDDINGS_DIR)
+        os.makedirs(embeddings_dir, exist_ok=True)
+        
+        # Clean up old embeddings first
+        cleanup_old_embeddings(employee_id, embeddings_dir)
+        
+        # Save as multiple files
+        for i, embedding in enumerate(embeddings):
+            filename = f"employee_{employee_id}_embedding_{i}.npy"
+            filepath = os.path.join(embeddings_dir, filename)
+            np.save(filepath, embedding)
+        
+        print(f"Saved {len(embeddings)} embeddings for employee {employee_id} to {embeddings_dir}")
+        return True
     except Exception as e:
-        print(f"Lỗi khi lưu embedding cho employee {employee_id}: {str(e)}")
+        print(f"Error saving multiple embeddings: {str(e)}")
+        return False
 
-def load_employee_embeddings(employee_id: int) -> Optional[np.ndarray]:
+def cleanup_old_embeddings(employee_id: int, embeddings_dir: str) -> None:
+    """Clean up old embedding files for an employee"""
     try:
-        path = _employee_embedding_path(employee_id)
-        if not os.path.exists(path):
-            return None
-        emb = np.load(path)
-        # Ensure 2D array (num_samples, 512)
-        if emb.ndim == 1:
-            emb = emb[None, :]
-        # Normalize rows
-        norms = np.linalg.norm(emb, axis=1, keepdims=True)
-        norms[norms == 0] = 1.0
-        emb = (emb / norms).astype(np.float32)
-        return emb
+        import glob
+        pattern = os.path.join(embeddings_dir, f"employee_{employee_id}_embedding_*.npy")
+        old_files = glob.glob(pattern)
+        for file_path in old_files:
+            os.remove(file_path)
+        if old_files:
+            print(f"Cleaned up {len(old_files)} old embedding files for employee {employee_id}")
     except Exception as e:
-        print(f"Lỗi khi tải embeddings cho employee {employee_id}: {str(e)}")
+        print(f"Error cleaning up old embeddings: {str(e)}")
+
+def save_employee_embedding(employee_id: int, embedding: np.ndarray) -> bool:
+    """Save single embedding to employee_embeddings directory (for regular registration)"""
+    try:
+        embeddings_dir = os.path.join(os.getcwd(), EMPLOYEE_EMBEDDINGS_DIR)
+        os.makedirs(embeddings_dir, exist_ok=True)
+        
+        # Save as single embedding file (index 0)
+        filename = f"employee_{employee_id}_embedding_0.npy"
+        filepath = os.path.join(embeddings_dir, filename)
+        
+        # Clean up any existing embeddings first
+        cleanup_old_embeddings(employee_id, embeddings_dir)
+        
+        # Save the single embedding
+        np.save(filepath, embedding)
+        print(f"Saved single embedding for employee {employee_id} to {embeddings_dir}")
+        return True
+        
+    except Exception as e:
+        print(f"Error saving embedding for employee {employee_id}: {str(e)}")
+        return False
+
+def load_employee_embeddings(employee_id: int) -> Optional[List[np.ndarray]]:
+    """Load multiple embeddings for an employee (augmented enrollment)"""
+    try:
+        embeddings_dir = os.path.join(os.getcwd(), EMPLOYEE_EMBEDDINGS_DIR)
+        embeddings = []
+        
+        # Look for multiple embedding files
+        i = 0
+        while True:
+            filename = f"employee_{employee_id}_embedding_{i}.npy"
+            filepath = os.path.join(embeddings_dir, filename)
+            
+            if os.path.exists(filepath):
+                embedding = np.load(filepath)
+                embeddings.append(embedding)
+                i += 1
+            else:
+                break
+        
+        if len(embeddings) > 0:
+            print(f"Loaded {len(embeddings)} embeddings for employee {employee_id}")
+            return embeddings
+        
+        # Fallback to old single embedding format
+        old_path = _employee_embedding_path(employee_id)
+        if os.path.exists(old_path):
+            old_embeddings = np.load(old_path)
+            if old_embeddings.ndim == 1:
+                embeddings = [old_embeddings]
+            elif old_embeddings.ndim == 2:
+                embeddings = [old_embeddings[i] for i in range(old_embeddings.shape[0])]
+            
+            print(f"Loaded {len(embeddings)} embeddings from old format for employee {employee_id}")
+            return embeddings
+        
+        print(f"No embeddings found for employee {employee_id}")
+        return None
+        
+    except Exception as e:
+        print(f"Error loading embeddings for employee {employee_id}: {str(e)}")
         return None

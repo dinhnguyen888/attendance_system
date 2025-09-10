@@ -40,6 +40,8 @@ RUN pip install -r requirements.txt
 COPY . .
 
 RUN mkdir -p /app/employee_faces
+RUN mkdir -p /app/employee_canny_features
+RUN mkdir -p /app/employee_embeddings
 
 EXPOSE 8000
 
