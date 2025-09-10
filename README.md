@@ -264,14 +264,14 @@ custom_api_services/
 
 #### 1. Face Embeddings (Vector đặc trưng) - **PHƯƠNG PHÁP CHÍNH**
 - **Mục đích**: Phương pháp chính để nhận diện khuôn mặt trong hệ thống
-- **Trọng số**: 80% trong quyết định cuối cùng (kết hợp với Canny 20%)
-- **Ngưỡng**: 0.7 (COSINE_THRESHOLD trong config)
+- **Trọng số**: 85% trong quyết định cuối cùng (kết hợp với Canny 15%)
+- **Ngưỡng**: 0.6 (COSINE_THRESHOLD trong config)
 - **Định nghĩa**: Vector 512 chiều từ mô hình InsightFace ArcFace
 - **Ưu điểm**: Độ chính xác cao, bất biến với góc chụp và ánh sáng
 
 #### 2. Canny Features (Đặc trưng biên Canny) - **PHƯƠNG PHÁP BỔ TRỢ**
 - **Mục đích**: Bổ trợ cho embeddings, tăng độ tin cậy
-- **Trọng số**: 20% trong quyết định cuối cùng (kết hợp với Embeddings 80%)
+- **Trọng số**: 15% trong quyết định cuối cùng (kết hợp với Embeddings 85%)
 - **Quy trình**: Canny edge detection → contour extraction → feature points comparison
 - **Ưu điểm**: Ít bị ảnh hưởng bởi thay đổi ánh sáng, xử lý nhanh
 
@@ -287,7 +287,7 @@ custom_api_services/
 - **Áp dụng**: Strict validation cho registration, lenient cho verification
 
 #### 5. Face Detection (Phát hiện khuôn mặt)
-- **Phương pháp chính**: InsightFace với confidence threshold ≥ 0.8
+- **Phương pháp chính**: InsightFace với confidence threshold ≥ 0.6
 - **Fallback**: OpenCV Haar Cascade nếu InsightFace thất bại
 - **Xử lý**: Chỉ chấp nhận 1 khuôn mặt, chọn khuôn mặt lớn nhất nếu có nhiều
 
@@ -328,7 +328,7 @@ graph TD
    
    **Tiếp theo**: Sau khi ảnh đã được validate, hệ thống bắt đầu tìm kiếm khuôn mặt trong ảnh.
    
-   - **Phương pháp chính - InsightFace**: Sử dụng mô hình AI InsightFace để phát hiện khuôn mặt. Mô hình này trả về tọa độ bounding box (x, y, width, height) và confidence score cho mỗi khuôn mặt được phát hiện. Chỉ chấp nhận những khuôn mặt có confidence ≥ 0.8.
+   - **Phương pháp chính - InsightFace**: Sử dụng mô hình AI InsightFace để phát hiện khuôn mặt. Mô hình này trả về tọa độ bounding box (x, y, width, height) và confidence score cho mỗi khuôn mặt được phát hiện. Chỉ chấp nhận những khuôn mặt có confidence ≥ 0.6.
    
    - **Phương pháp dự phòng - OpenCV**: Nếu InsightFace không phát hiện được khuôn mặt nào, hệ thống chuyển sang sử dụng Haar Cascade classifier của OpenCV với các tham số: scaleFactor=1.1, minNeighbors=4, minSize=(60,60).
    
@@ -398,8 +398,8 @@ graph TD
     H --> I[Load Stored Data]
     I --> J[Compare Embeddings]
     J --> K[Compare Canny Features]
-    K --> L[Combined Scoring: 80% Embedding + 20% Canny]
-    L --> M{Final Score >= 0.7?}
+    K --> L[Combined Scoring: 85% Embedding + 15% Canny]
+    L --> M{Final Score >= 0.6?}
     M -->|Yes| N[Authentication Success]
     M -->|No| O[Authentication Failed]
 ```
@@ -442,10 +442,10 @@ graph TD
    
    - **So sánh Canny features**: Sử dụng `compare_canny_features()` với threshold=0.1 để tính Canny similarity.
    
-   - **Combined scoring**: Tính điểm cuối cùng = 80% × embedding_similarity + 20% × canny_similarity
+   - **Combined scoring**: Tính điểm cuối cùng = 85% × embedding_similarity + 15% × canny_similarity
    
    - **Quyết định cuối cùng**: 
-     - Nếu `final_confidence >= COSINE_THRESHOLD` (0.7): **SUCCESS** - Cho phép check-in/check-out
+     - Nếu `final_confidence >= COSINE_THRESHOLD` (0.6): **SUCCESS** - Cho phép check-in/check-out
      - Nếu không đạt ngưỡng: **FAILED** - Từ chối với thông báo confidence score
    
    **Logging và feedback**: Ghi lại embedding similarity, Canny similarity và final confidence score để trả về cho client.
@@ -486,7 +486,7 @@ graph TD
 #### POST `/face-recognition/verify`  
 **Input**: `employee_id` (Form), `action` (Form), `face_image` (File)
 **Process**: Image preprocessing → Face detection → Skin normalization → Embedding extraction → Canny extraction → **Single embedding comparison**
-**Output**: Match result với combined confidence score (85% embedding + 15% Canny, ngưỡng 0.7)
+**Output**: Match result với combined confidence score (85% embedding + 15% Canny, ngưỡng 0.6)
 
 #### POST `/face-recognition/verify-max-similarity` 🚧 **ĐANG PHÁT TRIỂN**
 **Input**: `employee_id` (Form), `action` (Form), `face_image` (File)
@@ -524,8 +524,8 @@ Process:
 5. Combined scoring: Final_Confidence = 0.85 × S_embedding + 0.15 × S_canny
 
 Decision:
-- if Final_Confidence ≥ 0.7: ✅ ACCEPT (Authentication Success)
-- if Final_Confidence < 0.7: ❌ REJECT (Authentication Failed)
+- if Final_Confidence ≥ 0.6: ✅ ACCEPT (Authentication Success)
+- if Final_Confidence < 0.6: ❌ REJECT (Authentication Failed)
 ```
 
 ## **PHƯƠNG PHÁP ĐANG PHÁT TRIỂN: Augmented + Max Similarity** 🚧
@@ -605,7 +605,7 @@ Registration: 1 ảnh → 1 embedding + Canny features → Lưu 2 files
 Verification: webcam → 1 embedding → So sánh 1-1 → Combined scoring (85% embedding + 15% Canny) → Decision
 Accuracy: ~85-92% (tùy thuộc chất lượng ảnh và điều kiện ánh sáng)
 Storage: 2 files per employee
-Threshold: 0.7 (combined confidence)
+Threshold: 0.6 (combined confidence)
 ```
 
 #### **Phương pháp 2: Augmented + Max Similarity (Đang phát triển)** 🚧
