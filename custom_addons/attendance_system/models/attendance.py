@@ -203,26 +203,41 @@ class HrEmployeeFace(models.Model):
         }
     
     def action_delete_face(self):
-        """Xóa ảnh khuôn mặt"""
+        """Xóa ảnh khuôn mặt và dữ liệu trên API server"""
         self.ensure_one()
-        if self.is_active:
-            return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': 'Lỗi',
-                    'message': 'Không thể xóa ảnh đang được sử dụng. Vui lòng chọn ảnh khác làm ảnh chính trước.',
-                    'type': 'danger',
-                }
-            }
+     
         
+        # Gọi API để xóa dữ liệu trên face recognition server
+        try:
+            from ..controllers.attendance_controller import AttendanceController
+            controller = AttendanceController()
+            delete_result = controller._call_face_delete_api(self.employee_id.id)
+            
+            if not delete_result.get('success'):
+                return {
+                    'type': 'ir.actions.client',
+                    'tag': 'display_notification',
+                    'params': {
+                        'title': 'Cảnh báo',
+                        'message': f'Xóa ảnh thành công nhưng không thể xóa dữ liệu API: {delete_result.get("message", "Lỗi không xác định")}',
+                        'type': 'warning',
+                    }
+                }
+        except Exception as e:
+            # Nếu gọi API thất bại, vẫn tiếp tục xóa ảnh trong database
+            import logging
+            _logger = logging.getLogger(__name__)
+            _logger.warning(f"Failed to call face delete API: {str(e)}")
+        
+        face_name = self.name
         self.unlink()
+        
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
                 'title': 'Thành công',
-                'message': f'Đã xóa ảnh "{self.name}"',
+                'message': f'Đã xóa ảnh "{face_name}" và dữ liệu API',
                 'type': 'success',
             }
         }
@@ -239,6 +254,25 @@ class HrEmployeeFace(models.Model):
                     'title': 'Lỗi',
                     'message': 'Không có ảnh khuôn mặt để đăng ký',
                     'type': 'danger',
+                }
+            }
+        
+        # Kiểm tra xem nhân viên đã có ảnh được đăng ký trước chưa
+        existing_registered_faces = self.env['hr.employee.face'].search([
+            ('employee_id', '=', self.employee_id.id),
+            ('action', '=', 'register'),
+            ('is_active', '=', True),
+            ('id', '!=', self.id)  # Loại trừ chính ảnh hiện tại
+        ])
+        
+        if existing_registered_faces:
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': 'Thông báo',
+                    'message': f'Nhân viên {self.employee_id.name} đã có ảnh khuôn mặt được đăng ký trước đó. Vui lòng xóa ảnh cũ trước khi đăng ký ảnh mới.',
+                    'type': 'warning',
                 }
             }
         

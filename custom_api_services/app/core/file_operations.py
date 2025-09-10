@@ -92,7 +92,7 @@ def delete_employee_files(employee_id: int) -> dict:
     if os.path.exists(embedding_path):
         try:
             os.remove(embedding_path)
-            deleted_files.append(f"employee_{employee_id}.npy")
+            deleted_files.append(f"employee_{employee_id}_embedding_0.npy")
             print(f"Deleted ArcFace embedding: {embedding_path}")
         except Exception as e:
             errors.append(f"Cannot delete ArcFace embedding: {str(e)}")

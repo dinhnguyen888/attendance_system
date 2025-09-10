@@ -13,10 +13,10 @@ EMPLOYEE_CANNY_FEATURES_DIR = "employee_canny_features"
 EMPLOYEE_EMBEDDINGS_DIR = "employee_embeddings"
 
 # Face recognition thresholds (optimized based on actual performance)
-ARCFACE_THRESHOLD = 0.6   # Primary ArcFace embedding threshold (realistic for same person)
+ARCFACE_THRESHOLD = 0.5   # Primary ArcFace embedding threshold (realistic for same person)
 LBP_ORB_THRESHOLD = 0.45  # Backup LBP+ORB threshold (lower due to method limitations)
 CANNY_THRESHOLD = 0.15    # Backup Canny threshold (lower for edge features)
-COSINE_THRESHOLD = 0.6    # Legacy compatibility (same as ARCFACE_THRESHOLD)
+COSINE_THRESHOLD = 0.5    # Legacy compatibility (same as ARCFACE_THRESHOLD)
 MAX_EMBEDDINGS_PER_EMPLOYEE = 8  # Increased for augmented enrollment
 
 # Confidence thresholds for method selection (adjusted for realistic performance)

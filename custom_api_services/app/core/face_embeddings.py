@@ -235,7 +235,7 @@ def make_face_decision(similarity: float, threshold: float = COSINE_THRESHOLD) -
 
 # Path helper for stored embeddings
 def _employee_embedding_path(employee_id: int) -> str:
-    return os.path.join(EMPLOYEE_FACES_DIR, f"employee_{employee_id}.npy")
+    return os.path.join(EMPLOYEE_EMBEDDINGS_DIR, f"employee_{employee_id}_embedding_0.npy")
 
 def save_multiple_employee_embeddings(employee_id: int, embeddings: List[np.ndarray]) -> bool:
     """Save multiple embeddings for an employee (augmented enrollment)"""
