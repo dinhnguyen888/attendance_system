@@ -6,4 +6,3 @@ khi gửi thông tin ảnh vào trong api_service, ảnh bị đặt tên không
 #Nếu người dùng ở môi trường quá tối hoặc quá sáng, app sẽ nhận diện sai khuôn mặt
 +Quá tối thì ai cũng nhận diện được
 +Quá sáng thì không ai nhận diện được
-+không phân biệt được ảnh thật hay ảnh chụp từ người khác
