@@ -1,59 +1,77 @@
 version: "3.8"
 
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:13
-    environment:
-      POSTGRES_DB: odoo
-      POSTGRES_USER: odoo
-      POSTGRES_PASSWORD: odoo
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Face 3D Match API Service
+    face_3d_match_api:
+        build:
+            context: ./face_3D_match_api
+            dockerfile: Dockerfile
+        ports:
+            - "8080:8080"
+        volumes:
+            - ./face_3D_match_api:/app
+            - face_3d_models:/app/models
+            - face_3d_cascade:/app/cascade
+            - face_3d_employee_data:/app/employee_data
+        environment:
+            - TZ=Asia/Ho_Chi_Minh
 
-  # Face Recognition API Service
-  face_recognition_api:
-    build:
-      context: ./custom_api_services
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./custom_api_services:/app
-      - employee_faces_data:/app/employee_faces
-      - employee_canny_features_data:/app/employee_canny_features
-      - employee_embeddings_data:/app/employee_embeddings
-    environment:
-      - PYTHONPATH=/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-    depends_on:
-      - postgres
+    # PostgreSQL Database
+    postgres:
+        image: postgres:13
+        environment:
+            POSTGRES_DB: odoo
+            POSTGRES_USER: odoo
+            POSTGRES_PASSWORD: odoo
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        ports:
+            - "5432:5432"
 
-  # Odoo Application
-  odoo:
-    build:
-      context: ./custom_addons
-      dockerfile: Dockerfile
-    depends_on:
-      - postgres
-      - face_recognition_api
-    ports:
-      - "8069:8069"
-    volumes:
-      - ./custom_addons:/mnt/extra-addons
-      - ./odoo.conf:/etc/odoo/odoo.conf
-      - odoo_data:/var/lib/odoo
-    environment:
-      - HOST=postgres
-      - USER=odoo
-      - PASSWORD=odoo
-    command: -- --config=/etc/odoo/odoo.conf
+    # Face Recognition API Service
+    face_recognition_api:
+        build:
+            context: ./custom_api_services
+            dockerfile: Dockerfile
+        ports:
+            - "8000:8000"
+        volumes:
+            - ./custom_api_services:/app
+            - employee_faces_data:/app/employee_faces
+            - employee_canny_features_data:/app/employee_canny_features
+            - employee_embeddings_data:/app/employee_embeddings
+        environment:
+            - PYTHONPATH=/app
+        command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+        depends_on:
+            - postgres
+
+    # Odoo Application
+    odoo:
+        build:
+            context: ./custom_addons
+            dockerfile: Dockerfile
+        depends_on:
+            - postgres
+            - face_recognition_api
+        ports:
+            - "8069:8069"
+        volumes:
+            - ./custom_addons:/mnt/extra-addons
+            - ./odoo.conf:/etc/odoo/odoo.conf
+            - odoo_data:/var/lib/odoo
+        environment:
+            - HOST=postgres
+            - USER=odoo
+            - PASSWORD=odoo
+        command: -- --config=/etc/odoo/odoo.conf
 
 volumes:
-  postgres_data:
-  odoo_data:
-  employee_faces_data:
-  employee_canny_features_data:
-  employee_embeddings_data:
+    postgres_data:
+    odoo_data:
+    employee_faces_data:
+    employee_canny_features_data:
+    employee_embeddings_data:
+    face_3d_models:
+    face_3d_cascade:
+    face_3d_employee_data:
