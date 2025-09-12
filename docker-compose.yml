@@ -23,6 +23,8 @@ services:
     volumes:
       - ./custom_api_services:/app
       - employee_faces_data:/app/employee_faces
+      - employee_canny_features_data:/app/employee_canny_features
+      - employee_embeddings_data:/app/employee_embeddings
     environment:
       - PYTHONPATH=/app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -53,3 +55,5 @@ volumes:
   postgres_data:
   odoo_data:
   employee_faces_data:
+  employee_canny_features_data:
+  employee_embeddings_data:
