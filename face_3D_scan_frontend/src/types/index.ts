@@ -1,18 +1,22 @@
-export interface FaceRegistrationResponse {
-  message: string;
-  video: string;
-  frames_dir: string;
-  preprocess_dir: string;
-  embedding_dir: string;
+export interface Employee {
+  id: string;
+  name?: string;
 }
 
-export interface FaceRegistrationError {
+export interface FaceScanResult {
+  success: boolean;
   message: string;
+  videoBlob?: Blob;
 }
 
-export interface RecordingState {
-  isRecording: boolean;
-  isPaused: boolean;
-  duration: number;
-  blob: Blob | null;
+export interface ScanProgress {
+  isScanning: boolean;
+  progress: number;
+  phase: 'waiting' | 'face_detection' | 'circle_scan' | 'complete';
+}
+
+export interface FaceMeshDetection {
+  isDetected: boolean;
+  landmarks?: any[];
+  confidence?: number;
 }

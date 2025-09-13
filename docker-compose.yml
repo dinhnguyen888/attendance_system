@@ -45,6 +45,18 @@ services:
         depends_on:
             - postgres
 
+    # Face 3D Scan Frontend
+    face_3d_scan_frontend:
+        build:
+            context: ./face_3D_scan_frontend
+            dockerfile: Dockerfile
+        ports:
+            - "3000:3000"
+        depends_on:
+            - face_3d_match_api
+        environment:
+            - TZ=Asia/Ho_Chi_Minh
+
     # Odoo Application
     odoo:
         build:

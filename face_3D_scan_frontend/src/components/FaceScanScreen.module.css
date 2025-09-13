@@ -1,0 +1,213 @@
+.faceScanScreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.cancelBtn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: none;
+  border: none;
+  color: #007AFF;
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.scanningArea {
+  position: relative;
+  width: 400px;
+  height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 60px;
+}
+
+.videoContainer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  overflow: hidden;
+  z-index: 2;
+  border: 3px solid #00ff00;
+  box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+}
+
+.videoFeed {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  transform: scaleX(-1); /* Flip video horizontally */
+}
+
+.faceMeshOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.progressCircleContainer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.progressCircle {
+  width: 400px;
+  height: 400px;
+}
+
+.progressSvg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Animated scanning circle - only one circle that rotates in 5 seconds */
+.scanningCircle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 380px;
+  height: 380px;
+  border: 4px solid transparent;
+  border-top: 4px solid #00ff00;
+  border-radius: 50%;
+  z-index: 4;
+  pointer-events: none;
+  animation: rotate 15s linear infinite;
+  box-shadow: 0 0 30px rgba(0, 255, 0, 0.4);
+}
+
+@keyframes rotate {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+.instructions {
+  text-align: center;
+  margin-bottom: 40px;
+  min-height: 60px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.instructionText {
+  font-size: 18px;
+  margin: 0;
+  color: white;
+  font-weight: 400;
+}
+
+.faceDetected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.startScanBtn {
+  background: #00ff00;
+  color: #000;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.startScanBtn:hover {
+  background: #00cc00;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 255, 0, 0.3);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .scanningArea {
+    width: 350px;
+    height: 350px;
+    margin-bottom: 40px;
+  }
+  
+  .videoContainer {
+    width: 250px;
+    height: 250px;
+  }
+  
+  .progressCircle {
+    width: 350px;
+    height: 350px;
+  }
+  
+  .scanningCircle {
+    width: 330px;
+    height: 330px;
+  }
+  
+  .instructions {
+    margin-bottom: 30px;
+  }
+  
+  .instructionText {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .scanningArea {
+    width: 300px;
+    height: 300px;
+    margin-bottom: 30px;
+  }
+  
+  .videoContainer {
+    width: 220px;
+    height: 220px;
+  }
+  
+  .progressCircle {
+    width: 300px;
+    height: 300px;
+  }
+  
+  .scanningCircle {
+    width: 280px;
+    height: 280px;
+  }
+  
+  .instructionText {
+    font-size: 14px;
+  }
+}
