@@ -35,5 +35,15 @@ if ! is_valid_model; then
 fi
 echo "[entrypoint] Model looks valid."
 
+# Normalize binary path for backward compatibility
+if [ "$1" = "./build/face_3d_match_api" ] || [ "$1" = "build/face_3d_match_api" ]; then
+  set -- "/app/face_3d_match_api" "${@:2}"
+fi
+
+# If the provided binary doesn't exist but the new one does, switch
+if ! command -v "$1" >/dev/null 2>&1 && [ -x "/app/face_3d_match_api" ]; then
+  set -- "/app/face_3d_match_api" "${@:2}"
+fi
+
 echo "[entrypoint] Starting: $@"
 exec "$@"

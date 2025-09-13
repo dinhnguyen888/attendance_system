@@ -9,7 +9,6 @@ services:
         ports:
             - "8080:8080"
         volumes:
-            - ./face_3D_match_api:/app
             - face_3d_models:/app/models
             - face_3d_cascade:/app/cascade
             - face_3d_employee_data:/app/employee_data
