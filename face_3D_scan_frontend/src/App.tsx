@@ -66,26 +66,6 @@ function App() {
           employeeId: employee.id,
           videoBlob,
         });
-      } else if (action === 'checkin') {
-        setProcessingMessage('Đang chấm công vào...');
-        setProcessingSubMessage('Hệ thống đang xác thực danh tính và ghi nhận giờ vào');
-        actionMessage = 'Chấm công vào';
-        
-        response = await apiService.checkIn({
-          employeeId: employee.id,
-          videoBlob,
-          type: 'checkin',
-        });
-      } else if (action === 'checkout') {
-        setProcessingMessage('Đang chấm công ra...');
-        setProcessingSubMessage('Hệ thống đang xác thực danh tính và ghi nhận giờ ra');
-        actionMessage = 'Chấm công ra';
-        
-        response = await apiService.checkOut({
-          employeeId: employee.id,
-          videoBlob,
-          type: 'checkout',
-        });
       }
 
       // Show success message
@@ -116,6 +96,43 @@ function App() {
       setProcessingSubMessage('Không thể xử lý video. Vui lòng thử lại.');
       
       // Keep loading screen for 3 seconds to show error message
+      setTimeout(() => {
+        setIsProcessing(false);
+        setProcessingMessage('');
+        setProcessingSubMessage('');
+      }, 3000);
+    }
+  };
+
+  const handleCheckInOutComplete = async (result: any) => {
+    if (!employee) return;
+
+    // Show loading screen
+    setIsProcessing(true);
+    setCurrentAction(null);
+
+    try {
+      const actionMessage = result.action === 'checkin' ? 'Check-in' : 'Check-out';
+      
+      if (result.match) {
+        setProcessingMessage(`${actionMessage} thành công!`);
+        setProcessingSubMessage(`Độ tương đồng: ${(result.similarity * 100).toFixed(1)}%`);
+      } else {
+        setProcessingMessage(`${actionMessage} thất bại`);
+        setProcessingSubMessage(`Độ tương đồng: ${(result.similarity * 100).toFixed(1)}% (cần >= 75%)`);
+      }
+      
+      // Keep loading screen for 3 seconds to show result
+      setTimeout(() => {
+        setIsProcessing(false);
+        setProcessingMessage('');
+        setProcessingSubMessage('');
+      }, 3000);
+    } catch (error) {
+      console.error('Error processing result:', error);
+      setProcessingMessage('Đã xảy ra lỗi');
+      setProcessingSubMessage('Không thể xử lý kết quả. Vui lòng thử lại.');
+      
       setTimeout(() => {
         setIsProcessing(false);
         setProcessingMessage('');
@@ -157,10 +174,12 @@ function App() {
   }
 
   if (currentAction) {
+    const mode = currentAction === 'face-registration' ? 'register' : currentAction as 'checkin' | 'checkout';
     return (
       <FaceScanScreen
         employeeId={employee.id}
-        onComplete={handleScanComplete}
+        mode={mode}
+        onComplete={currentAction === 'face-registration' ? handleScanComplete : handleCheckInOutComplete}
         onCancel={handleScanCancel}
       />
     );

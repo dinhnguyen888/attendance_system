@@ -88,6 +88,182 @@ void register_routes(crow::SimpleApp& app) {
         res.add_header("Access-Control-Allow-Origin", "*");
         res.end();
     });
+
+    // Check-in endpoint
+    CROW_ROUTE(app, "/api/checkin").methods(crow::HTTPMethod::POST)([](const crow::request& req, crow::response& res) {
+        crow::multipart::message body(req);
+        auto employeeField = body.get_part_by_name("employee_id");
+        auto videoField = body.get_part_by_name("video");
+
+        if (employeeField.body.empty() || videoField.body.empty()) {
+            json err; err["message"] = "Missing employee_id or video";
+            res.code = 400;
+            res.body = err.dump();
+            res.add_header("Content-Type", "application/json");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.end();
+            return;
+        }
+
+        std::string employeeId = employeeField.body;
+        std::vector<uint8_t> videoBytes(videoField.body.begin(), videoField.body.end());
+
+        // Step 1: Validate video
+        auto val = validate_video_faces(videoBytes);
+        if (!val.ok) {
+            json err; err["message"] = val.message;
+            res.code = 400;
+            res.body = err.dump();
+            res.add_header("Content-Type", "application/json");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.end();
+            return;
+        }
+
+        // Step 2: Extract single best frame
+        auto frames = extract_representative_frames(videoBytes, 1);
+        if (frames.empty()) {
+            json err; err["message"] = "Failed to extract frame from video";
+            res.code = 400;
+            res.body = err.dump();
+            res.add_header("Content-Type", "application/json");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.end();
+            return;
+        }
+
+        // Step 3: Preprocess face
+        auto preprocessed = preprocess_faces(frames);
+        if (preprocessed.empty()) {
+            json err; err["message"] = "Failed to preprocess face";
+            res.code = 400;
+            res.body = err.dump();
+            res.add_header("Content-Type", "application/json");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.end();
+            return;
+        }
+
+        // Step 4: Compute embedding
+        auto embs = compute_embeddings(preprocessed);
+        if (embs.empty()) {
+            json err; err["message"] = "Failed to compute embedding";
+            res.code = 400;
+            res.body = err.dump();
+            res.add_header("Content-Type", "application/json");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.end();
+            return;
+        }
+
+        // Step 5: Compare with stored embeddings
+        auto comparison = compare_face_embedding(embs[0], employeeId);
+        
+        // Step 6: Save comparison image
+        std::string comparisonImagePath = save_comparison_image(employeeId, preprocessed[0], "checkin");
+
+        json result;
+        result["match"] = comparison.match;
+        result["similarity"] = comparison.similarity;
+        result["message"] = comparison.match ? "Check-in successful" : "Check-in failed";
+        result["comparison_image"] = comparisonImagePath;
+        result["employee_id"] = employeeId;
+        result["action"] = "checkin";
+        
+        res.code = 200;
+        res.body = result.dump();
+        res.add_header("Content-Type", "application/json");
+        res.add_header("Access-Control-Allow-Origin", "*");
+        res.end();
+    });
+
+    // Check-out endpoint
+    CROW_ROUTE(app, "/api/checkout").methods(crow::HTTPMethod::POST)([](const crow::request& req, crow::response& res) {
+        crow::multipart::message body(req);
+        auto employeeField = body.get_part_by_name("employee_id");
+        auto videoField = body.get_part_by_name("video");
+
+        if (employeeField.body.empty() || videoField.body.empty()) {
+            json err; err["message"] = "Missing employee_id or video";
+            res.code = 400;
+            res.body = err.dump();
+            res.add_header("Content-Type", "application/json");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.end();
+            return;
+        }
+
+        std::string employeeId = employeeField.body;
+        std::vector<uint8_t> videoBytes(videoField.body.begin(), videoField.body.end());
+
+        // Step 1: Validate video
+        auto val = validate_video_faces(videoBytes);
+        if (!val.ok) {
+            json err; err["message"] = val.message;
+            res.code = 400;
+            res.body = err.dump();
+            res.add_header("Content-Type", "application/json");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.end();
+            return;
+        }
+
+        // Step 2: Extract single best frame
+        auto frames = extract_representative_frames(videoBytes, 1);
+        if (frames.empty()) {
+            json err; err["message"] = "Failed to extract frame from video";
+            res.code = 400;
+            res.body = err.dump();
+            res.add_header("Content-Type", "application/json");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.end();
+            return;
+        }
+
+        // Step 3: Preprocess face
+        auto preprocessed = preprocess_faces(frames);
+        if (preprocessed.empty()) {
+            json err; err["message"] = "Failed to preprocess face";
+            res.code = 400;
+            res.body = err.dump();
+            res.add_header("Content-Type", "application/json");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.end();
+            return;
+        }
+
+        // Step 4: Compute embedding
+        auto embs = compute_embeddings(preprocessed);
+        if (embs.empty()) {
+            json err; err["message"] = "Failed to compute embedding";
+            res.code = 400;
+            res.body = err.dump();
+            res.add_header("Content-Type", "application/json");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.end();
+            return;
+        }
+
+        // Step 5: Compare with stored embeddings
+        auto comparison = compare_face_embedding(embs[0], employeeId);
+        
+        // Step 6: Save comparison image
+        std::string comparisonImagePath = save_comparison_image(employeeId, preprocessed[0], "checkout");
+
+        json result;
+        result["match"] = comparison.match;
+        result["similarity"] = comparison.similarity;
+        result["message"] = comparison.match ? "Check-out successful" : "Check-out failed";
+        result["comparison_image"] = comparisonImagePath;
+        result["employee_id"] = employeeId;
+        result["action"] = "checkout";
+        
+        res.code = 200;
+        res.body = result.dump();
+        res.add_header("Content-Type", "application/json");
+        res.add_header("Access-Control-Allow-Origin", "*");
+        res.end();
+    });
 }
 
 

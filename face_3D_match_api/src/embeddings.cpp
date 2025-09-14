@@ -1,5 +1,7 @@
 #include "embeddings.h"
 #include <iostream>
+#include <fstream>
+#include <sstream>
 
 static cv::dnn::Net dnn_net;
 
@@ -136,6 +138,157 @@ Embedding compute_mean_embedding(const std::vector<Embedding>& embs) {
     }
     for (auto& v : mean) v /= static_cast<float>(embs.size());
     return mean;
+}
+
+// Load embeddings from file system
+std::vector<Embedding> load_employee_embeddings(const std::string& employeeId) {
+    std::vector<Embedding> embeddings;
+    std::string baseDir = "/app/employee_data/embedding/employee_" + employeeId;
+    
+    for (int i = 0; i < 10; ++i) {
+        std::string filePath = baseDir + "/emb_" + std::to_string(i) + ".txt";
+        std::ifstream file(filePath);
+        if (!file.is_open()) continue;
+        
+        std::string line;
+        if (std::getline(file, line)) {
+            std::vector<float> embedding;
+            std::stringstream ss(line);
+            std::string value;
+            
+            while (std::getline(ss, value, ',')) {
+                try {
+                    embedding.push_back(std::stof(value));
+                } catch (const std::exception& e) {
+                    std::cout << "[WARNING] Failed to parse embedding value: " << value << std::endl;
+                }
+            }
+            
+            if (!embedding.empty()) {
+                embeddings.push_back(embedding);
+            }
+        }
+        file.close();
+    }
+    
+    std::cout << "[INFO] Loaded " << embeddings.size() << " embeddings for employee " << employeeId << std::endl;
+    return embeddings;
+}
+
+Embedding load_mean_embedding(const std::string& employeeId) {
+    std::string filePath = "/app/employee_data/embedding/employee_" + employeeId + "/mean.txt";
+    std::ifstream file(filePath);
+    Embedding mean_embedding;
+    
+    if (!file.is_open()) {
+        std::cout << "[WARNING] Mean embedding file not found: " << filePath << std::endl;
+        return mean_embedding;
+    }
+    
+    std::string line;
+    if (std::getline(file, line)) {
+        std::stringstream ss(line);
+        std::string value;
+        
+        while (std::getline(ss, value, ',')) {
+            try {
+                mean_embedding.push_back(std::stof(value));
+            } catch (const std::exception& e) {
+                std::cout << "[WARNING] Failed to parse mean embedding value: " << value << std::endl;
+            }
+        }
+    }
+    file.close();
+    
+    std::cout << "[INFO] Loaded mean embedding with " << mean_embedding.size() << " dimensions for employee " << employeeId << std::endl;
+    return mean_embedding;
+}
+
+// Compare embeddings for face recognition
+ComparisonResult compare_face_embedding(const Embedding& input_embedding, const std::string& employeeId) {
+    ComparisonResult result;
+    
+    // Load stored embeddings
+    auto stored_embeddings = load_employee_embeddings(employeeId);
+    auto mean_embedding = load_mean_embedding(employeeId);
+    
+    if (stored_embeddings.empty() && mean_embedding.empty()) {
+        result.message = "No stored embeddings found for employee " + employeeId;
+        return result;
+    }
+    
+    // Normalize input embedding
+    Embedding normalized_input = input_embedding;
+    float norm = 0.0f;
+    for (float val : normalized_input) norm += val * val;
+    norm = std::sqrt(norm);
+    if (norm > 0) {
+        for (float& val : normalized_input) val /= norm;
+    }
+    
+    float best_similarity = 0.0f;
+    Embedding best_match;
+    
+    // Compare with individual embeddings
+    for (const auto& stored_emb : stored_embeddings) {
+        if (stored_emb.size() != normalized_input.size()) continue;
+        
+        // Normalize stored embedding
+        Embedding normalized_stored = stored_emb;
+        float stored_norm = 0.0f;
+        for (float val : normalized_stored) stored_norm += val * val;
+        stored_norm = std::sqrt(stored_norm);
+        if (stored_norm > 0) {
+            for (float& val : normalized_stored) val /= stored_norm;
+        }
+        
+        // Calculate cosine similarity
+        float similarity = 0.0f;
+        for (size_t i = 0; i < normalized_input.size(); ++i) {
+            similarity += normalized_input[i] * normalized_stored[i];
+        }
+        
+        if (similarity > best_similarity) {
+            best_similarity = similarity;
+            best_match = stored_emb;
+        }
+    }
+    
+    // Also compare with mean embedding if available
+    if (!mean_embedding.empty() && mean_embedding.size() == normalized_input.size()) {
+        Embedding normalized_mean = mean_embedding;
+        float mean_norm = 0.0f;
+        for (float val : normalized_mean) mean_norm += val * val;
+        mean_norm = std::sqrt(mean_norm);
+        if (mean_norm > 0) {
+            for (float& val : normalized_mean) val /= mean_norm;
+        }
+        
+        float mean_similarity = 0.0f;
+        for (size_t i = 0; i < normalized_input.size(); ++i) {
+            mean_similarity += normalized_input[i] * normalized_mean[i];
+        }
+        
+        if (mean_similarity > best_similarity) {
+            best_similarity = mean_similarity;
+            best_match = mean_embedding;
+        }
+    }
+    
+    // Set threshold for matching (adjust as needed)
+    const float SIMILARITY_THRESHOLD = 0.75f;
+    
+    result.similarity = best_similarity;
+    result.match = best_similarity >= SIMILARITY_THRESHOLD;
+    
+    if (result.match) {
+        result.message = "Face recognition successful. Similarity: " + std::to_string(best_similarity);
+    } else {
+        result.message = "Face recognition failed. Similarity: " + std::to_string(best_similarity) + " (threshold: " + std::to_string(SIMILARITY_THRESHOLD) + ")";
+    }
+    
+    std::cout << "[INFO] Face comparison result: " << result.message << std::endl;
+    return result;
 }
 
 

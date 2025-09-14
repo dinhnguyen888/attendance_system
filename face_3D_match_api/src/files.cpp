@@ -1,6 +1,9 @@
 #include "files.h"
 #include <filesystem>
 #include <fstream>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 
 static std::string ensure_dir(const std::string& base) {
     std::filesystem::create_directories(base);
@@ -51,6 +54,25 @@ bool save_mean_embedding(const std::string& employeeId, const std::vector<float>
         f << mean[i];
     }
     return true;
+}
+
+std::string save_comparison_image(const std::string& employeeId, const cv::Mat& image, const std::string& action) {
+    std::string dir = ensure_dir("/app/employee_data/comparison/employee_" + employeeId);
+    
+    // Generate timestamp for unique filename
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&time_t), "%Y%m%d_%H%M%S");
+    ss << "_" << std::setfill('0') << std::setw(3) << ms.count();
+    
+    std::string filename = action + "_" + ss.str() + ".jpg";
+    std::string filepath = dir + "/" + filename;
+    
+    cv::imwrite(filepath, image);
+    return filepath;
 }
 
 

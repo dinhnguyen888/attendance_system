@@ -8,5 +8,6 @@ std::string save_frames(const std::string& employeeId, const std::vector<cv::Mat
 std::string save_preprocessed_frames(const std::string& employeeId, const std::vector<cv::Mat>& frames);
 std::string save_embeddings(const std::string& employeeId, const std::vector<std::vector<float>>& embs);
 bool save_mean_embedding(const std::string& employeeId, const std::vector<float>& mean);
+std::string save_comparison_image(const std::string& employeeId, const cv::Mat& image, const std::string& action);
 
 

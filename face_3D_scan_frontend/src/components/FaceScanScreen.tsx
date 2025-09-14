@@ -5,16 +5,20 @@ import styles from './FaceScanScreen.module.css';
 
 interface FaceScanScreenProps {
   employeeId: string;
-  onComplete: (videoBlob: Blob) => void;
+  onComplete: (videoBlob: Blob | any) => void;
   onCancel: () => void;
+  mode?: 'register' | 'checkin' | 'checkout';
 }
 
-export const FaceScanScreen = ({ onComplete, onCancel }: FaceScanScreenProps) => {
+export const FaceScanScreen = ({ employeeId, onComplete, onCancel, mode = 'register' }: FaceScanScreenProps) => {
   const [scanProgress, setScanProgress] = useState<ScanProgress>({
     isScanning: false,
     progress: 0,
     phase: 'waiting'
   });
+  
+  const [countdown, setCountdown] = useState(3);
+  const countdownRef = useRef<number | null>(null);
   
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [isFaceDetected, setIsFaceDetected] = useState(false);
@@ -128,10 +132,40 @@ export const FaceScanScreen = ({ onComplete, onCancel }: FaceScanScreenProps) =>
     }
   }, [isFaceDetected, scanProgress.phase]);
 
+  const startCountdown = () => {
+    // For checkin/checkout, skip hold_still phase and go directly to recording
+    if (mode === 'checkin' || mode === 'checkout') {
+      startScanning();
+      return;
+    }
+    
+    // For register mode, show hold_still phase first
+    setScanProgress(prev => ({ ...prev, phase: 'hold_still' }));
+    setCountdown(3);
+    
+    countdownRef.current = window.setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          if (countdownRef.current) {
+            clearInterval(countdownRef.current);
+          }
+          startScanning();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   const startScanning = async () => {
     if (!videoRef.current) return;
 
-    setScanProgress(prev => ({ ...prev, isScanning: true, phase: 'circle_scan' }));
+    // For checkin/checkout, don't show scanning animation, just record
+    if (mode === 'checkin' || mode === 'checkout') {
+      setScanProgress(prev => ({ ...prev, isScanning: true, phase: 'processing' }));
+    } else {
+      setScanProgress(prev => ({ ...prev, isScanning: true, phase: 'circle_scan' }));
+    }
 
     // Start video recording
     const stream = videoRef.current.srcObject as MediaStream;
@@ -150,7 +184,13 @@ export const FaceScanScreen = ({ onComplete, onCancel }: FaceScanScreenProps) =>
       if (recordedChunksRef.current.length > 0) {
         const videoBlob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
         console.log('Video blob created:', videoBlob.size, 'bytes');
-        onComplete(videoBlob);
+        
+        if (mode === 'register') {
+          onComplete(videoBlob);
+        } else {
+          // For checkin/checkout, process the video directly
+          processVideo(videoBlob);
+        }
       } else {
         console.error('No video chunks recorded');
         onCancel();
@@ -160,7 +200,9 @@ export const FaceScanScreen = ({ onComplete, onCancel }: FaceScanScreenProps) =>
     setMediaRecorder(recorder);
     recorder.start();
 
-    // Wait exactly 15 seconds then stop recording to ensure enough frames
+    // Different recording duration based on mode
+    const recordingDuration = mode === 'register' ? 15000 : 3000;
+    
     setTimeout(() => {
       setScanProgress(prev => ({ ...prev, phase: 'complete' }));
       // Small delay to ensure all data is available
@@ -169,13 +211,57 @@ export const FaceScanScreen = ({ onComplete, onCancel }: FaceScanScreenProps) =>
           recorder.stop();
         }
       }, 100);
-    }, 15000);
+    }, recordingDuration);
+  };
+
+  const processVideo = async (videoBlob: Blob) => {
+    setScanProgress(prev => ({ ...prev, phase: 'processing' }));
+    
+    try {
+      const formData = new FormData();
+      formData.append('video', videoBlob, 'video.webm');
+      formData.append('employee_id', employeeId);
+      
+      // Use environment variable or fallback to localhost for development
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+      const fullUrl = `${API_URL}/api/${mode}`;
+      console.log('Making request to:', fullUrl);
+      console.log('Environment VITE_API_URL:', import.meta.env.VITE_API_URL);
+      
+      const response = await fetch(fullUrl, {
+        method: 'POST',
+        body: formData
+      });
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      const result = await response.json();
+      
+      if (response.ok) {
+        setScanProgress(prev => ({ ...prev, phase: 'complete' }));
+        setTimeout(() => {
+          onComplete(result);
+        }, 2000);
+      } else {
+        throw new Error(result.message || 'Processing failed');
+      }
+    } catch (error) {
+      console.error('Error processing video:', error);
+      alert(`Lỗi xử lý video: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      onCancel();
+    }
   };
 
   const handleCancel = () => {
     // Stop recording if in progress
     if (mediaRecorder && mediaRecorder.state === 'recording') {
       mediaRecorder.stop();
+    }
+    
+    // Stop countdown if in progress
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
     }
     
     // Stop camera stream
@@ -196,6 +282,7 @@ export const FaceScanScreen = ({ onComplete, onCancel }: FaceScanScreenProps) =>
     });
     setIsFaceDetected(false);
     setMediaRecorder(null);
+    setCountdown(3);
     recordedChunksRef.current = [];
     
     // Reload page for clean state
@@ -264,8 +351,8 @@ export const FaceScanScreen = ({ onComplete, onCancel }: FaceScanScreenProps) =>
           </motion.div>
         </div>
 
-        {/* Animated scanning circle */}
-        {scanProgress.isScanning && (
+        {/* Animated scanning circle - only show for register mode */}
+        {scanProgress.isScanning && mode === 'register' && (
           <div className={styles.scanningCircle} />
         )}
 
@@ -297,10 +384,32 @@ export const FaceScanScreen = ({ onComplete, onCancel }: FaceScanScreenProps) =>
               <p className={styles.instructionText}>Đã phát hiện khuôn mặt! Sẵn sàng quét</p>
               <button 
                 className={styles.startScanBtn}
-                onClick={startScanning}
+                onClick={startCountdown}
               >
                 Bắt đầu quét
               </button>
+            </motion.div>
+          )}
+          
+          {scanProgress.phase === 'hold_still' && mode === 'register' && (
+            <motion.div
+              key="hold-still"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className={styles.holdStill}
+            >
+              <p className={styles.instructionText}>Giữ yên khuôn mặt trong</p>
+              <motion.div
+                key={countdown}
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 1.5, opacity: 0 }}
+                className={styles.countdownNumber}
+              >
+                {countdown}
+              </motion.div>
+              <p className={styles.instructionText}>giây...</p>
             </motion.div>
           )}
           
@@ -312,7 +421,22 @@ export const FaceScanScreen = ({ onComplete, onCancel }: FaceScanScreenProps) =>
               exit={{ opacity: 0, y: -20 }}
               className={styles.instructionText}
             >
-              Di chuyển đầu từ từ để hoàn thành vòng tròn trong 15 giây
+              {mode === 'register' 
+                ? 'Di chuyển đầu từ từ để hoàn thành vòng tròn trong 15 giây'
+                : 'Đang quay video...'
+              }
+            </motion.p>
+          )}
+          
+          {scanProgress.phase === 'processing' && (
+            <motion.p
+              key="processing"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className={styles.instructionText}
+            >
+              Đang xử lý...
             </motion.p>
           )}
         </AnimatePresence>

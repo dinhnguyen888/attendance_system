@@ -4,4 +4,13 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://face_3d_match_api:8080',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
+  }
 })

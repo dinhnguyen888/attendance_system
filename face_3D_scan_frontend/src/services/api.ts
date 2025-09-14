@@ -86,9 +86,8 @@ class ApiService {
       const formData = new FormData();
       formData.append('employee_id', request.employeeId);
       formData.append('video', request.videoBlob, 'checkin.webm');
-      formData.append('type', request.type);
 
-      const response = await this.api.post('/attendance/checkin', formData, {
+      const response = await this.api.post('/api/checkin', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -112,9 +111,8 @@ class ApiService {
       const formData = new FormData();
       formData.append('employee_id', request.employeeId);
       formData.append('video', request.videoBlob, 'checkout.webm');
-      formData.append('type', request.type);
 
-      const response = await this.api.post('/attendance/checkout', formData, {
+      const response = await this.api.post('/api/checkout', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
