@@ -64,7 +64,7 @@ void register_routes(crow::SimpleApp& app) {
         }
         auto framesDir = save_frames(employeeId, frames);
 
-        // Step 4: Preprocess
+        // Step 4: Preprocess with enhanced face detection and quality improvement
         auto preprocessed = preprocess_faces(frames);
         auto preDir = save_preprocessed_frames(employeeId, preprocessed);
 

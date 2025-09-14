@@ -1,8 +1,11 @@
 #include "video_processing.h"
+#include "face_processing.h"
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <cstdio>
 #include <cstdlib>
+#include <algorithm>
+#include <cmath>
 
 cv::CascadeClassifier& get_face_cascade() {
     static cv::CascadeClassifier cascade;
@@ -36,26 +39,37 @@ ValidationResult validate_video_faces(const std::vector<uint8_t>& videoBytes) {
         return result;
     }
 
-    cv::CascadeClassifier& cascade = get_face_cascade();
     int frameCount = 0;
     int validFrames = 0;
+    int multipleFacesFrames = 0;
     
     while (frameCount < 30) { // Check first 30 frames
         cv::Mat frame;
         if (!cap.read(frame)) break;
         
-        cv::Mat gray;
-        cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+        // Use enhanced face detection to find the largest face
+        cv::Rect largest_face = detect_largest_face(frame);
         
-        std::vector<cv::Rect> faces;
-        cascade.detectMultiScale(gray, faces, 1.1, 3, 0, cv::Size(60, 60));
-        
-        if (faces.size() == 1) {
-            validFrames++;
-        } else if (faces.size() > 1) {
-            result.message = "Multiple faces detected";
-            std::remove(tmpPath.c_str());
-            return result;
+        if (!largest_face.empty()) {
+            // Check if there are multiple faces by detecting all faces
+            cv::Mat gray;
+            cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
+            
+            cv::CascadeClassifier& cascade = get_face_cascade();
+            std::vector<cv::Rect> all_faces;
+            cascade.detectMultiScale(gray, all_faces, 1.1, 3, 0, cv::Size(60, 60));
+            
+            if (all_faces.size() == 1) {
+                validFrames++;
+            } else if (all_faces.size() > 1) {
+                multipleFacesFrames++;
+                // Allow some frames with multiple faces, but not too many
+                if (multipleFacesFrames > 5) {
+                    result.message = "Too many frames with multiple faces detected";
+                    std::remove(tmpPath.c_str());
+                    return result;
+                }
+            }
         }
         
         frameCount++;
@@ -69,7 +83,7 @@ ValidationResult validate_video_faces(const std::vector<uint8_t>& videoBytes) {
     }
     
     result.ok = true;
-    result.message = "Video validation passed";
+    result.message = "Video validation passed with enhanced face detection";
     return result;
 }
 
@@ -99,7 +113,6 @@ std::vector<cv::Mat> extract_representative_frames(const std::vector<uint8_t>& v
     }
     int segments = std::max(1, numSegments);
 
-    cv::CascadeClassifier& cascade = get_face_cascade();
     for (int s = 0; s < segments; ++s) {
         double start = (total * s) / segments;
         double end = (total * (s + 1)) / segments;
@@ -108,14 +121,42 @@ std::vector<cv::Mat> extract_representative_frames(const std::vector<uint8_t>& v
         for (double i = start; i < end; i += std::max(1.0, (end-start)/15.0)) {
             cap.set(cv::CAP_PROP_POS_FRAMES, i);
             cv::Mat frame; if (!cap.read(frame)) break;
+            
+            // Use enhanced face detection to find the largest face
+            cv::Rect largest_face = detect_largest_face(frame);
+            if (largest_face.empty()) continue;
+            
+            // Check if there are multiple faces
             cv::Mat gray; cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
-            std::vector<cv::Rect> faces; cascade.detectMultiScale(gray, faces, 1.1, 3, 0, cv::Size(60,60));
-            if (faces.size() != 1) continue;
-            // focus score: variance of Laplacian
+            cv::CascadeClassifier& cascade = get_face_cascade();
+            std::vector<cv::Rect> all_faces; 
+            cascade.detectMultiScale(gray, all_faces, 1.1, 3, 0, cv::Size(60,60));
+            if (all_faces.size() != 1) continue;
+            
+            // Enhanced focus score: combine Laplacian variance with face size and position
             cv::Mat lap; cv::Laplacian(gray, lap, CV_64F);
             cv::Scalar mu, sigma; cv::meanStdDev(lap, mu, sigma);
-            double score = sigma.val[0] * sigma.val[0];
-            if (score > bestScore) { bestScore = score; best = frame.clone(); }
+            double laplacian_score = sigma.val[0] * sigma.val[0];
+            
+            // Face size score (larger faces are better)
+            double face_size_score = largest_face.area() / (frame.rows * frame.cols);
+            
+            // Face position score (center is better)
+            double center_x = frame.cols / 2.0;
+            double center_y = frame.rows / 2.0;
+            double face_center_x = largest_face.x + largest_face.width / 2.0;
+            double face_center_y = largest_face.y + largest_face.height / 2.0;
+            double distance_from_center = sqrt(pow(face_center_x - center_x, 2) + pow(face_center_y - center_y, 2));
+            double max_distance = sqrt(pow(frame.cols / 2.0, 2) + pow(frame.rows / 2.0, 2));
+            double position_score = 1.0 - (distance_from_center / max_distance);
+            
+            // Combined score
+            double score = laplacian_score * 0.5 + face_size_score * 1000 * 0.3 + position_score * 100 * 0.2;
+            
+            if (score > bestScore) { 
+                bestScore = score; 
+                best = frame.clone(); 
+            }
         }
         if (!best.empty()) result.push_back(best);
     }
@@ -154,7 +195,6 @@ std::vector<cv::Mat> extract_representative_frames_from_file(const std::string& 
     }
     int segments = std::max(1, numSegments);
 
-    cv::CascadeClassifier& cascade = get_face_cascade();
     for (int s = 0; s < segments; ++s) {
         double start = (total * s) / segments;
         double end = (total * (s + 1)) / segments;
@@ -163,14 +203,42 @@ std::vector<cv::Mat> extract_representative_frames_from_file(const std::string& 
         for (double i = start; i < end; i += std::max(1.0, (end-start)/15.0)) {
             cap.set(cv::CAP_PROP_POS_FRAMES, i);
             cv::Mat frame; if (!cap.read(frame)) break;
+            
+            // Use enhanced face detection to find the largest face
+            cv::Rect largest_face = detect_largest_face(frame);
+            if (largest_face.empty()) continue;
+            
+            // Check if there are multiple faces
             cv::Mat gray; cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
-            std::vector<cv::Rect> faces; cascade.detectMultiScale(gray, faces, 1.1, 3, 0, cv::Size(60,60));
-            if (faces.size() != 1) continue;
-            // focus score: variance of Laplacian
+            cv::CascadeClassifier& cascade = get_face_cascade();
+            std::vector<cv::Rect> all_faces; 
+            cascade.detectMultiScale(gray, all_faces, 1.1, 3, 0, cv::Size(60,60));
+            if (all_faces.size() != 1) continue;
+            
+            // Enhanced focus score: combine Laplacian variance with face size and position
             cv::Mat lap; cv::Laplacian(gray, lap, CV_64F);
             cv::Scalar mu, sigma; cv::meanStdDev(lap, mu, sigma);
-            double score = sigma.val[0] * sigma.val[0];
-            if (score > bestScore) { bestScore = score; best = frame.clone(); }
+            double laplacian_score = sigma.val[0] * sigma.val[0];
+            
+            // Face size score (larger faces are better)
+            double face_size_score = largest_face.area() / (frame.rows * frame.cols);
+            
+            // Face position score (center is better)
+            double center_x = frame.cols / 2.0;
+            double center_y = frame.rows / 2.0;
+            double face_center_x = largest_face.x + largest_face.width / 2.0;
+            double face_center_y = largest_face.y + largest_face.height / 2.0;
+            double distance_from_center = sqrt(pow(face_center_x - center_x, 2) + pow(face_center_y - center_y, 2));
+            double max_distance = sqrt(pow(frame.cols / 2.0, 2) + pow(frame.rows / 2.0, 2));
+            double position_score = 1.0 - (distance_from_center / max_distance);
+            
+            // Combined score
+            double score = laplacian_score * 0.5 + face_size_score * 1000 * 0.3 + position_score * 100 * 0.2;
+            
+            if (score > bestScore) { 
+                bestScore = score; 
+                best = frame.clone(); 
+            }
         }
         if (!best.empty()) result.push_back(best);
     }
