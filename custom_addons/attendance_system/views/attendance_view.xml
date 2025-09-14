@@ -65,4 +65,26 @@
               parent="hr_attendance.menu_hr_attendance_root"
               action="action_webcam_attendance"
               sequence="10"/>
+    
+    <!-- Action for 3D Scan -->
+    <record id="action_3d_scan_attendance" model="ir.actions.server">
+        <field name="name">Quét 3D</field>
+        <field name="model_id" ref="hr_attendance.model_hr_attendance"/>
+        <field name="state">code</field>
+        <field name="code">
+employee = env['hr.employee'].search([('user_id', '=', env.user.id)], limit=1)
+if employee:
+    employee_id = employee.id
+    action = {'type': 'ir.actions.act_url', 'url': f'http://localhost:3000/?id={employee_id}', 'target': 'new'}
+else:
+    action = {'type': 'ir.actions.act_url', 'url': 'http://localhost:3000/', 'target': 'new'}
+        </field>
+    </record>
+    
+    <!-- Menu for 3D Scan -->
+    <menuitem id="menu_3d_scan_attendance"
+              name="Quét 3D"
+              parent="hr_attendance.menu_hr_attendance_root"
+              action="action_3d_scan_attendance"
+              sequence="15"/>
 </odoo>

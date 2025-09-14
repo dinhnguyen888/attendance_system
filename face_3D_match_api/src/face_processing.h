@@ -1,6 +1,7 @@
 #pragma once
 #include <opencv2/opencv.hpp>
 #include <vector>
+#include "embeddings.h"
 
 // face detection and processing functions
 cv::Rect detect_largest_face(const cv::Mat& frame);
@@ -12,5 +13,3 @@ cv::Mat sharpen_image(const cv::Mat& img);
 
 // preprocessing function with face detection and quality improvement
 std::vector<cv::Mat> preprocess_faces(const std::vector<cv::Mat>& frames);
-
-

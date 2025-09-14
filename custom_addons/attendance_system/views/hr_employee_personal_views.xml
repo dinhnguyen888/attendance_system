@@ -57,4 +57,20 @@ else:
               action="hr_employee_personal_current_user_action"
               groups="base.group_user"
               sequence="15"/>
+    
+    <!-- Action for 3D Face Data -->
+    <record id="action_3d_face_data" model="ir.actions.server">
+        <field name="name">Dữ liệu khuôn mặt 3D</field>
+        <field name="model_id" ref="hr.model_hr_employee"/>
+        <field name="state">code</field>
+        <field name="code">action = {'type': 'ir.actions.act_url', 'url': '/3d-scan/view-3d-scan', 'target': 'self'}</field>
+    </record>
+    
+    <!-- Menu for 3D Face Data -->
+    <menuitem id="menu_3d_face_data"
+              name="Dữ liệu khuôn mặt 3D"
+              parent="hr.menu_hr_root"
+              action="action_3d_face_data"
+              groups="base.group_system"
+              sequence="20"/>
 </odoo>

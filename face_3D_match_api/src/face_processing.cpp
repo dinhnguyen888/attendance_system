@@ -167,7 +167,16 @@ std::vector<cv::Mat> preprocess_faces(const std::vector<cv::Mat>& frames) {
     for (const auto& frame : frames) {
         if (frame.empty()) continue;
         
-        // Detect the largest face (closest to camera)
+        // Try ArcFace pipeline first
+        ArcFaceResult arcface_result = process_face_with_arcface(frame);
+        if (arcface_result.success && !arcface_result.aligned_face.empty()) {
+            out.push_back(arcface_result.aligned_face);
+            std::cout << "[DEBUG] ArcFace processed face: " << arcface_result.aligned_face.size() << std::endl;
+            continue;
+        }
+        
+        // Fallback to legacy processing
+        std::cout << "[DEBUG] Using legacy face processing" << std::endl;
         cv::Rect face_rect = detect_largest_face(frame);
         
         if (face_rect.empty()) {

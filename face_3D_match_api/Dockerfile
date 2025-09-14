@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     libopencv-dev libopencv-contrib-dev \
     libavcodec-dev libavformat-dev libswscale-dev \
     libtbb-dev libjpeg-dev libpng-dev libtiff-dev \
+    libcurl4-openssl-dev \
     && ln -fs /usr/share/zoneinfo/$TZ /etc/localtime \
     && dpkg-reconfigure --frontend noninteractive tzdata \
     && rm -rf /var/lib/apt/lists/*
@@ -49,6 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgtk-3-0 \
     libopencv-dev \
     ffmpeg \
+    libcurl4 \
     && ln -fs /usr/share/zoneinfo/$TZ /etc/localtime \
     && dpkg-reconfigure --frontend noninteractive tzdata \
     && rm -rf /var/lib/apt/lists/*

@@ -218,37 +218,39 @@ export const FaceScanScreen = ({ employeeId, onComplete, onCancel, mode = 'regis
     setScanProgress(prev => ({ ...prev, phase: 'processing' }));
     
     try {
-      const formData = new FormData();
-      formData.append('video', videoBlob, 'video.webm');
-      formData.append('employee_id', employeeId);
+      // Import apiService dynamically to avoid circular imports
+      const { apiService } = await import('../services/api');
       
-      // Use environment variable or fallback to localhost for development
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-      const fullUrl = `${API_URL}/api/${mode}`;
-      console.log('Making request to:', fullUrl);
-      console.log('Environment VITE_API_URL:', import.meta.env.VITE_API_URL);
+      console.log(`🚀 Starting ${mode} flow with unified API...`);
       
-      const response = await fetch(fullUrl, {
-        method: 'POST',
-        body: formData
-      });
+      let result;
+      if (mode === 'checkin') {
+        result = await apiService.checkIn({
+          employeeId,
+          videoBlob,
+          type: 'checkin'
+        });
+      } else if (mode === 'checkout') {
+        result = await apiService.checkOut({
+          employeeId,
+          videoBlob,
+          type: 'checkout'
+        });
+      } else {
+        throw new Error('Invalid mode for processVideo');
+      }
       
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-      
-      const result = await response.json();
-      
-      if (response.ok) {
+      if (result.success) {
         setScanProgress(prev => ({ ...prev, phase: 'complete' }));
         setTimeout(() => {
           onComplete(result);
         }, 2000);
       } else {
-        throw new Error(result.message || 'Processing failed');
+        throw new Error(result.error || 'Processing failed');
       }
     } catch (error) {
       console.error('Error processing video:', error);
-      alert(`Lỗi xử lý video: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      alert(`Lỗi: ${error instanceof Error ? error.message : 'Unknown error'}`);
       onCancel();
     }
   };

@@ -2,13 +2,13 @@ cmake_minimum_required(VERSION 3.16)
 project(face_3d_match_api)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
-endif()
+find_package(OpenCV REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(CURL REQUIRED libcurl)
 
-find_package(OpenCV 4.5 REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
+include_directories(${CURL_INCLUDE_DIRS})
 
 include(FetchContent)
 FetchContent_Declare(
@@ -25,8 +25,13 @@ set(SOURCES
     src/face_processing.cpp
     src/embeddings.cpp
     src/files.cpp
+    src/utils.cpp
+    src/http_client.cpp
+    src/face_detector.cpp
+    src/face_alignment.cpp
+    src/arcface_processor.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
-target_include_directories(${PROJECT_NAME} PRIVATE src ${OpenCV_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} PRIVATE ${OpenCV_LIBS} Crow::Crow)
+target_include_directories(${PROJECT_NAME} PRIVATE src ${OpenCV_INCLUDE_DIRS} ${CURL_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${OpenCV_LIBS} Crow::Crow ${CURL_LIBRARIES})

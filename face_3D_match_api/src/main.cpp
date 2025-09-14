@@ -18,9 +18,13 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    // Initialize OpenCV DNN model
-    if (!initialize_dnn_model(modelPath)) {
-        std::cout << "[WARNING] DNN model initialization failed, will use fallback" << std::endl;
+    // Initialize ArcFace pipeline (new implementation)
+    if (!initialize_arcface_pipeline(modelPath, "models/retinaface.onnx")) {
+        std::cout << "[WARNING] ArcFace pipeline initialization failed, falling back to legacy DNN" << std::endl;
+        // Fallback to legacy implementation
+        if (!initialize_dnn_model(modelPath)) {
+            std::cout << "[WARNING] Legacy DNN model initialization also failed, will use fallback" << std::endl;
+        }
     }
     
     crow::SimpleApp app;

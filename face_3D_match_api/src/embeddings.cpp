@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <memory>
 
 static cv::dnn::Net dnn_net;
 
@@ -229,9 +230,13 @@ ComparisonResult compare_face_embedding(const Embedding& input_embedding, const 
     float best_similarity = 0.0f;
     Embedding best_match;
     
-    // Compare with individual embeddings
+    // Compare with individual embeddings using multiple methods
     for (const auto& stored_emb : stored_embeddings) {
-        if (stored_emb.size() != normalized_input.size()) continue;
+        if (stored_emb.size() != normalized_input.size()) {
+            std::cout << "[WARNING] Embedding size mismatch: input=" << normalized_input.size() 
+                      << " vs stored=" << stored_emb.size() << ", skipping comparison" << std::endl;
+            continue;
+        }
         
         // Normalize stored embedding
         Embedding normalized_stored = stored_emb;
@@ -242,20 +247,36 @@ ComparisonResult compare_face_embedding(const Embedding& input_embedding, const 
             for (float& val : normalized_stored) val /= stored_norm;
         }
         
-        // Calculate cosine similarity
-        float similarity = 0.0f;
+        // Method 1: Calculate cosine similarity
+        float cosine_similarity = 0.0f;
         for (size_t i = 0; i < normalized_input.size(); ++i) {
-            similarity += normalized_input[i] * normalized_stored[i];
+            cosine_similarity += normalized_input[i] * normalized_stored[i];
         }
         
-        if (similarity > best_similarity) {
-            best_similarity = similarity;
+        // Method 2: Euclidean distance (inverted to similarity)
+        float euclidean_distance = 0.0f;
+        for (size_t i = 0; i < normalized_input.size(); ++i) {
+            float diff = normalized_input[i] - stored_emb[i];
+            euclidean_distance += diff * diff;
+        }
+        euclidean_distance = std::sqrt(euclidean_distance);
+        float euclidean_similarity = 1.0f / (1.0f + euclidean_distance);
+        
+        // Combine both methods with weights (cosine similarity is more reliable)
+        float combined_similarity = 0.7f * cosine_similarity + 0.3f * euclidean_similarity;
+        
+        if (combined_similarity > best_similarity) {
+            best_similarity = combined_similarity;
             best_match = stored_emb;
         }
     }
     
-    // Also compare with mean embedding if available
-    if (!mean_embedding.empty() && mean_embedding.size() == normalized_input.size()) {
+    // Also compare with mean embedding if available using combined methods
+    if (!mean_embedding.empty()) {
+        if (mean_embedding.size() != normalized_input.size()) {
+            std::cout << "[WARNING] Mean embedding size mismatch: input=" << normalized_input.size() 
+                      << " vs mean=" << mean_embedding.size() << ", skipping mean comparison" << std::endl;
+        } else {
         Embedding normalized_mean = mean_embedding;
         float mean_norm = 0.0f;
         for (float val : normalized_mean) mean_norm += val * val;
@@ -264,22 +285,42 @@ ComparisonResult compare_face_embedding(const Embedding& input_embedding, const 
             for (float& val : normalized_mean) val /= mean_norm;
         }
         
-        float mean_similarity = 0.0f;
+        // Method 1: Cosine similarity with mean
+        float mean_cosine_similarity = 0.0f;
         for (size_t i = 0; i < normalized_input.size(); ++i) {
-            mean_similarity += normalized_input[i] * normalized_mean[i];
+            mean_cosine_similarity += normalized_input[i] * normalized_mean[i];
         }
         
-        if (mean_similarity > best_similarity) {
-            best_similarity = mean_similarity;
+        // Method 2: Euclidean distance with mean (inverted to similarity)
+        float mean_euclidean_distance = 0.0f;
+        for (size_t i = 0; i < normalized_input.size(); ++i) {
+            float diff = normalized_input[i] - mean_embedding[i];
+            mean_euclidean_distance += diff * diff;
+        }
+        mean_euclidean_distance = std::sqrt(mean_euclidean_distance);
+        float mean_euclidean_similarity = 1.0f / (1.0f + mean_euclidean_distance);
+        
+        // Combine both methods
+        float mean_combined_similarity = 0.7f * mean_cosine_similarity + 0.3f * mean_euclidean_similarity;
+        
+        if (mean_combined_similarity > best_similarity) {
+            best_similarity = mean_combined_similarity;
             best_match = mean_embedding;
+        }
         }
     }
     
-    // Set threshold for matching (adjust as needed)
-    const float SIMILARITY_THRESHOLD = 0.75f;
+    // Set threshold for matching (increased for better accuracy)
+    const float SIMILARITY_THRESHOLD = 0.75f; 
+    
+    // Additional validation: check if similarity is too high (possible duplicate/identical images)
+    const float MAX_REALISTIC_SIMILARITY = 0.98f;
+    if (best_similarity > MAX_REALISTIC_SIMILARITY) {
+        std::cout << "[WARNING] Suspiciously high similarity: " << best_similarity << " - possible duplicate image" << std::endl;
+    }
     
     result.similarity = best_similarity;
-    result.match = best_similarity >= SIMILARITY_THRESHOLD;
+    result.match = best_similarity >= SIMILARITY_THRESHOLD && best_similarity <= MAX_REALISTIC_SIMILARITY;
     
     if (result.match) {
         result.message = "Face recognition successful. Similarity: " + std::to_string(best_similarity);
@@ -289,6 +330,42 @@ ComparisonResult compare_face_embedding(const Embedding& input_embedding, const 
     
     std::cout << "[INFO] Face comparison result: " << result.message << std::endl;
     return result;
+}
+
+// Global ArcFace processor instance
+static std::unique_ptr<ArcFaceProcessor> g_arcface_processor = nullptr;
+
+ArcFaceProcessor& get_arcface_processor() {
+    if (!g_arcface_processor) {
+        g_arcface_processor = std::make_unique<ArcFaceProcessor>();
+    }
+    return *g_arcface_processor;
+}
+
+bool initialize_arcface_pipeline(const std::string& arcface_model_path, 
+                                const std::string& detector_model_path) {
+    std::cout << "[INFO] Initializing ArcFace pipeline..." << std::endl;
+    
+    ArcFaceProcessor& processor = get_arcface_processor();
+    bool success = processor.initialize(arcface_model_path, detector_model_path);
+    
+    if (success) {
+        std::cout << "[INFO] ArcFace pipeline initialized successfully" << std::endl;
+    } else {
+        std::cout << "[ERROR] Failed to initialize ArcFace pipeline" << std::endl;
+    }
+    
+    return success;
+}
+
+ArcFaceResult process_face_with_arcface(const cv::Mat& image) {
+    ArcFaceProcessor& processor = get_arcface_processor();
+    return processor.process_face(image, true); // Return largest face
+}
+
+FaceMatchResult match_face_with_arcface(const std::vector<float>& embedding, const std::string& employee_id) {
+    ArcFaceProcessor& processor = get_arcface_processor();
+    return processor.match_face(embedding, employee_id, 0.4f); // Standard ArcFace threshold
 }
 
 
