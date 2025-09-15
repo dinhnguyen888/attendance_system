@@ -101,41 +101,86 @@ class HrEmployeeFace(models.Model):
     
     @api.model
     def create(self, vals):
-        """Override create để tự động cập nhật employee và gọi API register"""
-        record = super().create(vals)
-        if record.is_active and record.employee_id and record.face_image:
-            # Cập nhật ảnh chính của employee
-            record.employee_id.write({
-                'face_image_data': record.face_image,
-                'face_registration_date': fields.Datetime.now()
+        """Override create để gọi API register trước, sau đó mới create record"""
+        
+        # Kiểm tra dữ liệu cần thiết
+        if not vals.get('employee_id') or not vals.get('face_image'):
+            return super().create(vals)
+        
+        # Lấy thông tin employee
+        employee = self.env['hr.employee'].browse(vals['employee_id'])
+        if not employee:
+            return super().create(vals)
+        
+        # Gọi API register face trước khi tạo record
+        api_success = False
+        api_message = ""
+        
+        try:
+            import requests
+            import base64
+            
+            # Decode ảnh từ base64 sang bytes
+            face_bytes = base64.b64decode(vals['face_image'])
+            api_url = "http://face_recognition_api:8000/face-recognition/register"
+            
+            files = {
+                'face_image': ('face.jpg', face_bytes, 'image/jpeg')
+            }
+            data = {
+                'action': 'register',
+                'employee_id': str(employee.id)
+            }
+            
+            response = requests.post(api_url, files=files, data=data, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    api_success = True
+                    api_message = "API register thành công"
+                    _logger.info(f"API register face thành công cho employee {employee.id}")
+                else:
+                    api_message = f"API trả về lỗi: {result.get('message', 'Unknown error')}"
+                    _logger.error(f"API register face thất bại: {api_message}")
+            else:
+                api_message = f"API trả về status code: {response.status_code}"
+                _logger.error(f"API register face thất bại: {api_message}")
+                
+        except Exception as e:
+            api_message = f"Lỗi khi gọi API: {str(e)}"
+            _logger.error(f"Lỗi khi gọi API register face: {str(e)}")
+        
+        # Chỉ tạo record nếu API thành công hoặc cho phép tạo dù API lỗi
+        if api_success:
+            # Cập nhật vals với thông tin API thành công
+            vals.update({
+                'notes': f"{vals.get('notes', '')} - {api_message}".strip(' -'),
+                'action': 'register'
             })
             
-            # Gọi API register face
-            try:
-                import requests
-                import base64
-                
-                if record.face_image:
-                    # Odoo binary fields are base64-encoded; decode to raw bytes for multipart
-                    face_bytes = base64.b64decode(record.face_image)
-                    api_url = "http://face_recognition_api:8000/face-recognition/register"
-                    files = {
-                        'face_image': ('face.jpg', face_bytes, 'image/jpeg')
-                    }
-                    data = {
-                        'action': 'register',
-                        'employee_id': str(record.employee_id.id)
-                    }
-                    response = requests.post(api_url, files=files, data=data, timeout=30)
-                    if response.status_code == 200:
-                        _logger.info(f"API register face thành công cho employee {record.employee_id.id}")
-                    else:
-                        _logger.error(f"API register face thất bại: {response.text}")
-                        
-            except Exception as e:
-                _logger.error(f"Lỗi khi gọi API register face: {str(e)}")
-        
-        return record
+            record = super().create(vals)
+            
+            # Cập nhật ảnh chính của employee
+            if record.is_active:
+                record.employee_id.write({
+                    'face_image_data': record.face_image,
+                    'face_registration_date': fields.Datetime.now()
+                })
+            
+            return record
+        else:
+            # API thất bại - có thể chọn 1 trong 2 cách:
+            # Cách 1: Không cho tạo record và thông báo lỗi
+            from odoo.exceptions import ValidationError
+            raise ValidationError(f"Không thể đăng ký khuôn mặt với API: {api_message}")
+            
+            # Cách 2: Vẫn tạo record nhưng đánh dấu lỗi API (uncomment dòng dưới nếu muốn dùng cách này)
+            # vals.update({
+            #     'notes': f"{vals.get('notes', '')} - CẢNH BÁO: {api_message}".strip(' -'),
+            #     'action': 'backup'  # Đánh dấu là backup do API lỗi
+            # })
+            # return super().create(vals)
     
     def write(self, vals):
         """Override write để xử lý khi thay đổi trạng thái active và gọi API register"""
