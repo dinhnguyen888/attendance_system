@@ -310,8 +310,9 @@ ComparisonResult compare_face_embedding(const Embedding& input_embedding, const 
         }
     }
     
-    // Set threshold for matching (increased for better accuracy)
-    const float SIMILARITY_THRESHOLD = 0.75f; 
+    // Set threshold for matching (significantly increased for better accuracy)
+    // For combined similarity (70% cosine + 30% euclidean), we need higher threshold
+    const float SIMILARITY_THRESHOLD = 0.8f; 
     
     // Additional validation: check if similarity is too high (possible duplicate/identical images)
     const float MAX_REALISTIC_SIMILARITY = 0.98f;
@@ -319,8 +320,16 @@ ComparisonResult compare_face_embedding(const Embedding& input_embedding, const 
         std::cout << "[WARNING] Suspiciously high similarity: " << best_similarity << " - possible duplicate image" << std::endl;
     }
     
+    // Additional validation: require minimum reasonable similarity
+    const float MIN_REALISTIC_SIMILARITY = 0.3f;
+    if (best_similarity < MIN_REALISTIC_SIMILARITY) {
+        std::cout << "[INFO] Very low similarity: " << best_similarity << " - clearly different person" << std::endl;
+    }
+    
     result.similarity = best_similarity;
-    result.match = best_similarity >= SIMILARITY_THRESHOLD && best_similarity <= MAX_REALISTIC_SIMILARITY;
+    result.match = best_similarity >= SIMILARITY_THRESHOLD && 
+                   best_similarity <= MAX_REALISTIC_SIMILARITY &&
+                   best_similarity >= MIN_REALISTIC_SIMILARITY;
     
     if (result.match) {
         result.message = "Face recognition successful. Similarity: " + std::to_string(best_similarity);
@@ -365,7 +374,7 @@ ArcFaceResult process_face_with_arcface(const cv::Mat& image) {
 
 FaceMatchResult match_face_with_arcface(const std::vector<float>& embedding, const std::string& employee_id) {
     ArcFaceProcessor& processor = get_arcface_processor();
-    return processor.match_face(embedding, employee_id, 0.4f); // Standard ArcFace threshold
+    return processor.match_face(embedding, employee_id, 0.6f); // More conservative ArcFace threshold
 }
 
 

@@ -266,19 +266,35 @@ FaceMatchResult ArcFaceProcessor::match_face(const std::vector<float>& input_emb
             }
         }
         
+        // Additional validation for realistic similarity ranges
+        const float MIN_REALISTIC_SIMILARITY = 0.2f;
+        const float MAX_REALISTIC_SIMILARITY = 0.95f;
+        
         result.similarity = best_similarity;
         result.best_match_id = employee_id;
-        result.match = best_similarity >= threshold;
         result.confidence = best_similarity;
         
-        if (result.match) {
+        // Enhanced matching logic with range validation
+        bool in_realistic_range = (best_similarity >= MIN_REALISTIC_SIMILARITY && 
+                                  best_similarity <= MAX_REALISTIC_SIMILARITY);
+        result.match = (best_similarity >= threshold) && in_realistic_range;
+        
+        if (best_similarity > MAX_REALISTIC_SIMILARITY) {
+            result.message = "Suspiciously high similarity: " + std::to_string(best_similarity) + 
+                           " - possible duplicate image";
+            std::cout << "[WARNING] " << result.message << std::endl;
+        } else if (best_similarity < MIN_REALISTIC_SIMILARITY) {
+            result.message = "Very low similarity: " + std::to_string(best_similarity) + 
+                           " - clearly different person";
+            std::cout << "[INFO] " << result.message << std::endl;
+        } else if (result.match) {
             result.message = "Face match successful. Similarity: " + std::to_string(best_similarity);
+            std::cout << "[INFO] " << result.message << std::endl;
         } else {
             result.message = "Face match failed. Similarity: " + std::to_string(best_similarity) + 
                            " (threshold: " + std::to_string(threshold) + ")";
+            std::cout << "[INFO] " << result.message << std::endl;
         }
-        
-        std::cout << "[INFO] " << result.message << std::endl;
         
     } catch (const std::exception& e) {
         result.message = "Exception during face matching: " + std::string(e.what());

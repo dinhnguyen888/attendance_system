@@ -119,7 +119,7 @@ function App() {
         setProcessingSubMessage(`Độ tương đồng: ${(result.similarity * 100).toFixed(1)}%`);
       } else {
         setProcessingMessage(`${actionMessage} thất bại`);
-        setProcessingSubMessage(`Độ tương đồng: ${(result.similarity * 100).toFixed(1)}% (cần >= 75%)`);
+        setProcessingSubMessage(`Độ tương đồng: ${(result.similarity * 100).toFixed(1)}% (cần >= 80%)`);
       }
       
       // Keep loading screen for 3 seconds to show result

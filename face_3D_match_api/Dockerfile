@@ -38,7 +38,7 @@ FROM ubuntu:24.04 AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Ho_Chi_Minh
 
-# Install only runtime libraries needed by the compiled binary
+# Install runtime libraries and filebrowser
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     libgomp1 \
@@ -51,9 +51,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libopencv-dev \
     ffmpeg \
     libcurl4 \
+    wget \
     && ln -fs /usr/share/zoneinfo/$TZ /etc/localtime \
     && dpkg-reconfigure --frontend noninteractive tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# Install filebrowser
+RUN wget --no-check-certificate -O /tmp/filebrowser.tar.gz https://github.com/filebrowser/filebrowser/releases/download/v2.27.0/linux-amd64-filebrowser.tar.gz \
+    && tar -xzf /tmp/filebrowser.tar.gz -C /usr/local/bin/ \
+    && chmod +x /usr/local/bin/filebrowser \
+    && rm /tmp/filebrowser.tar.gz
 
 WORKDIR /app
 
@@ -69,7 +76,7 @@ COPY cascade/ /app/cascade/
 # Prepare runtime dirs
 RUN mkdir -p /app/employee_data
 
-EXPOSE 8080
+EXPOSE 8080 8081
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["/app/face_3d_match_api", "--model", "models/resnet100.onnx", "--port", "8080"]

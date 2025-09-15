@@ -37,7 +37,7 @@ struct ComparisonResult {
 };
 
 // Constants
-const float SIMILARITY_THRESHOLD = 0.75f;
+const float SIMILARITY_THRESHOLD = 0.8f;
 const int MAX_EMBEDDINGS_PER_EMPLOYEE = 10;
 const int VIDEO_FRAME_INTERVAL = 1; // Extract 1 frame per second
 const int MIN_FACE_SIZE = 80;

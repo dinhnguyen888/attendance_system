@@ -63,7 +63,7 @@ else:
         <field name="name">Dữ liệu khuôn mặt 3D</field>
         <field name="model_id" ref="hr.model_hr_employee"/>
         <field name="state">code</field>
-        <field name="code">action = {'type': 'ir.actions.act_url', 'url': '/3d-scan/view-3d-scan', 'target': 'self'}</field>
+        <field name="code">action = {'type': 'ir.actions.act_url', 'url': 'http://localhost:8080/api/access-train-data', 'target': 'new'}</field>
     </record>
     
     <!-- Menu for 3D Face Data -->

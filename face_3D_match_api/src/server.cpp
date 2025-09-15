@@ -388,6 +388,38 @@ void register_routes(crow::SimpleApp& app) {
         res.add_header("Access-Control-Allow-Origin", "*");
         res.end();
     });
+
+    // File browser endpoint for accessing training data
+    CROW_ROUTE(app, "/api/access-train-data").methods(crow::HTTPMethod::GET)([](const crow::request& req, crow::response& res) {
+        try {
+            // Start filebrowser on port 8081 pointing to employee data directory
+            std::string command = "filebrowser -a 0.0.0.0 -p 8081 -r /app/employee_data --noauth > /dev/null 2>&1 &";
+            int result = system(command.c_str());
+            
+            if (result == 0) {
+                // Redirect to filebrowser interface
+                res.code = 302;
+                res.add_header("Location", "http://localhost:8081");
+                res.add_header("Access-Control-Allow-Origin", "*");
+                res.body = "Redirecting to file browser...";
+            } else {
+                json error;
+                error["error"] = "Failed to start file browser";
+                res.code = 500;
+                res.body = error.dump();
+                res.add_header("Content-Type", "application/json");
+                res.add_header("Access-Control-Allow-Origin", "*");
+            }
+        } catch (const std::exception& e) {
+            json error;
+            error["error"] = "Exception starting file browser: " + std::string(e.what());
+            res.code = 500;
+            res.body = error.dump();
+            res.add_header("Content-Type", "application/json");
+            res.add_header("Access-Control-Allow-Origin", "*");
+        }
+        res.end();
+    });
 }
 
 
