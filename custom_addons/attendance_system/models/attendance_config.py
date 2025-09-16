@@ -1,7 +1,5 @@
 from odoo import models, fields, api
-import logging
-
-_logger = logging.getLogger(__name__)
+from odoo.exceptions import AccessError
 
 class AttendanceConfig(models.Model):
     _name = 'attendance.config'
@@ -13,7 +11,6 @@ class AttendanceConfig(models.Model):
                                    help="Danh sách IP WiFi được phép điểm danh, mỗi IP một dòng")
     wifi_validation_enabled = fields.Boolean("Bật kiểm tra WiFi", default=True,
                                            help="Bật/tắt tính năng kiểm tra WiFi khi điểm danh")
-
     
     @api.model
     def get_config(self):
@@ -42,6 +39,25 @@ class AttendanceConfig(models.Model):
         
         allowed_list = self.get_allowed_wifi_ip_list()
         if not allowed_list:
-            return True  # Nếu không có IP WiFi nào được cấu hình, cho phép tất cả
+            return True
         
         return wifi_ip in allowed_list
+    
+    @api.model
+    def create(self, vals):
+        """Chỉ admin được tạo cấu hình"""
+        if not self.env.user.has_group('base.group_system'):
+            raise AccessError("❌ Chỉ Admin mới được tạo cấu hình điểm danh")
+        return super().create(vals)
+    
+    def write(self, vals):
+        """Chỉ admin được sửa cấu hình"""
+        if not self.env.user.has_group('base.group_system'):
+            raise AccessError("❌ Chỉ Admin mới được sửa cấu hình điểm danh")
+        return super().write(vals)
+    
+    def unlink(self):
+        """Chỉ admin được xóa cấu hình"""
+        if not self.env.user.has_group('base.group_system'):
+            raise AccessError("❌ Chỉ Admin mới được xóa cấu hình điểm danh")
+        return super().unlink()

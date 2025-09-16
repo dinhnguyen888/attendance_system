@@ -94,6 +94,7 @@ class ApiService {
             email: data['employee']['email'] ?? '',
             phone: data['employee']['phone'] ?? '',
             faceRegistered: data['employee']['face_registered'] ?? false,
+            startDate: data['employee']['start_date'],
           );
 
           return LoginResponse(
@@ -424,6 +425,7 @@ class ApiService {
           email: data['email'] ?? '',
           phone: data['phone'] ?? '',
           faceRegistered: data['face_registered'] ?? false,
+          startDate: data['start_date'],
         );
       }
       throw Exception('Failed to get profile: ${response.statusCode}');
@@ -457,11 +459,4 @@ class ApiService {
   }
 
   bool get isSessionValid => _token != null;
-
-  String _safeString(dynamic value) {
-    if (value == null || value == false) {
-      return 'Chưa có';
-    }
-    return value.toString();
-  }
 }

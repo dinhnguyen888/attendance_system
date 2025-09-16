@@ -9,6 +9,7 @@ class Employee {
   final bool faceRegistered;
   final String? lastAttendance;
   final String? manager;
+  final String? startDate;
 
   Employee({
     required this.id,
@@ -21,6 +22,7 @@ class Employee {
     required this.faceRegistered,
     this.lastAttendance,
     this.manager,
+    this.startDate,
   });
 
   factory Employee.fromJson(Map<String, dynamic> json) {
@@ -35,6 +37,7 @@ class Employee {
       faceRegistered: json['face_registered'] ?? false,
       lastAttendance: json['last_attendance'],
       manager: json['manager'] ?? '',
+      startDate: json['start_date'],
     );
   }
 
@@ -50,6 +53,7 @@ class Employee {
       'face_registered': faceRegistered,
       'last_attendance': lastAttendance,
       'manager': manager,
+      'start_date': startDate,
     };
   }
 }
