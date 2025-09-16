@@ -37,8 +37,6 @@ class ProfileCard extends StatelessWidget {
                 children: [
                   _buildHeaderSection(user),
                   const SizedBox(height: 20),
-                  _buildBasicInfoSection(user),
-                  const SizedBox(height: 16),
                   _buildContactInfoSection(user),
                   const SizedBox(height: 16),
                   _buildOrganizationalInfoSection(user),
@@ -106,31 +104,6 @@ class ProfileCard extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBasicInfoSection(Employee user) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildInfoItem(
-            icon: Icons.badge,
-            label: 'Mã NV',
-            value:
-                user.employeeCode != 'Chưa có' ? user.employeeCode : 'Chưa có',
-            valueColor:
-                user.employeeCode != 'Chưa có' ? Colors.white : Colors.white70,
-          ),
-        ),
-        Expanded(
-          child: _buildInfoItem(
-            icon: Icons.face,
-            label: 'Khuôn mặt',
-            value: user.faceRegistered ? 'Đã đăng ký' : 'Chưa đăng ký',
-            valueColor: user.faceRegistered ? Colors.green : Colors.orange,
           ),
         ),
       ],

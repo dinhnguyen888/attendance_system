@@ -1,6 +1,6 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_hr_attendance_employee,access.hr.attendance.employee,hr_attendance.model_hr_attendance,attendance_system.group_attendance_employee,1,1,1,0
-access_hr_attendance_dept_manager,access.hr.attendance.dept.manager,hr_attendance.model_hr_attendance,attendance_system.group_attendance_department_manager,1,1,0,0
+access_hr_attendance_employee,access.hr.attendance.employee,hr_attendance.model_hr_attendance,attendance_system.group_attendance_employee,1,0,1,0
+access_hr_attendance_dept_manager,access.hr.attendance.dept.manager,hr_attendance.model_hr_attendance,attendance_system.group_attendance_department_manager,1,1,1,0
 access_hr_attendance_hr_full,access.hr.attendance.hr.full,hr_attendance.model_hr_attendance,attendance_system.group_attendance_hr,1,1,1,1
 
 access_hr_employee_face_employee,access.hr.employee.face.employee,attendance_system.model_hr_employee_face,attendance_system.group_attendance_employee,1,0,0,0
@@ -12,8 +12,12 @@ access_hr_employee_personal_hr,access.hr.employee.personal.hr,base.model_res_use
 access_attendance_config_admin,access.attendance.config.admin,attendance_system.model_attendance_config,base.group_system,1,1,1,1
 access_hr_department_hr,access.hr.department.hr,hr.model_hr_department,attendance_system.group_attendance_hr,1,1,1,1
 access_hr_department_admin,access.hr.department.admin,hr.model_hr_department,base.group_system,1,1,1,1
+access_hr_department_dept_manager,access.hr.department.dept.manager,hr.model_hr_department,attendance_system.group_attendance_department_manager,1,0,0,0
+access_hr_department_employee,access.hr.department.employee,hr.model_hr_department,attendance_system.group_attendance_employee,1,0,0,0
 access_hr_employee_hr,access.hr.employee.hr,hr.model_hr_employee,attendance_system.group_attendance_hr,1,1,1,1
 access_hr_employee_admin,access.hr.employee.admin,hr.model_hr_employee,base.group_system,1,1,1,1
+access_hr_employee_dept_manager,access.hr.employee.dept.manager,hr.model_hr_employee,attendance_system.group_attendance_department_manager,1,1,1,0
+access_hr_employee_employee,access.hr.employee.employee,hr.model_hr_employee,attendance_system.group_attendance_employee,1,0,0,0
 
 access_hr_employee_face,access.hr.employee.face,attendance_system.model_hr_employee_face,hr.group_hr_user,1,1,1,1
 access_hr_employee_face_manager,access.hr.employee.face.manager,attendance_system.model_hr_employee_face,hr.group_hr_manager,1,1,1,1

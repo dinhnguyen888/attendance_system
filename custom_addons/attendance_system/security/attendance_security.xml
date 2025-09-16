@@ -22,7 +22,7 @@
             <field name="groups" eval="[(4, ref('attendance_system.group_attendance_employee'))]"/>
             <field name="domain_force">[("employee_id.user_id", "=", user.id)]</field>
             <field name="perm_read" eval="True"/>
-            <field name="perm_write" eval="True"/>
+            <field name="perm_write" eval="False"/>
             <field name="perm_create" eval="True"/>
             <field name="perm_unlink" eval="False"/>
         </record>
@@ -82,24 +82,24 @@
             <field name="perm_unlink" eval="True"/>
         </record>
 
-        <record id="rule_personal_employee_own" model="ir.rule">
-            <field name="name">Personal: Employee own info</field>
+        <record id="rule_personal_employee_read_department" model="ir.rule">
+            <field name="name">Personal: Employee read same department</field>
+            <field name="model_id" ref="base.model_res_users"/>
+            <field name="groups" eval="[(4, ref('attendance_system.group_attendance_employee'))]"/>
+            <field name="domain_force">[("employee_ids.department_id", "=", user.employee_id.department_id.id)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_personal_employee_write_own" model="ir.rule">
+            <field name="name">Personal: Employee write own info only</field>
             <field name="model_id" ref="base.model_res_users"/>
             <field name="groups" eval="[(4, ref('attendance_system.group_attendance_employee'))]"/>
             <field name="domain_force">[("id", "=", user.id)]</field>
             <field name="perm_read" eval="True"/>
             <field name="perm_write" eval="True"/>
-            <field name="perm_create" eval="False"/>
-            <field name="perm_unlink" eval="False"/>
-        </record>
-
-        <record id="rule_personal_employee_read_others" model="ir.rule">
-            <field name="name">Personal: Employee read others for attendance</field>
-            <field name="model_id" ref="base.model_res_users"/>
-            <field name="groups" eval="[(4, ref('attendance_system.group_attendance_employee'))]"/>
-            <field name="domain_force">[("id", "!=", False)]</field>
-            <field name="perm_read" eval="True"/>
-            <field name="perm_write" eval="False"/>
             <field name="perm_create" eval="False"/>
             <field name="perm_unlink" eval="False"/>
         </record>
@@ -118,6 +118,83 @@
         <record id="rule_personal_hr_all" model="ir.rule">
             <field name="name">Personal: HR full access</field>
             <field name="model_id" ref="base.model_res_users"/>
+            <field name="groups" eval="[(4, ref('attendance_system.group_attendance_hr'))]"/>
+            <field name="domain_force">[(1,'=',1)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <record id="rule_employee_department_manager_read_write" model="ir.rule">
+            <field name="name">Employee: Department manager read/write access</field>
+            <field name="model_id" ref="hr.model_hr_employee"/>
+            <field name="groups" eval="[(4, ref('attendance_system.group_attendance_department_manager'))]"/>
+            <field name="domain_force">["|", ("user_id", "=", user.id), ("department_id.manager_id.user_id", "=", user.id)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_employee_department_manager_create" model="ir.rule">
+            <field name="name">Employee: Department manager can create employees</field>
+            <field name="model_id" ref="hr.model_hr_employee"/>
+            <field name="groups" eval="[(4, ref('attendance_system.group_attendance_department_manager'))]"/>
+            <field name="domain_force">[(1,'=',1)]</field>
+            <field name="perm_read" eval="False"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_employee_read_same_department" model="ir.rule">
+            <field name="name">Employee: Read same department only</field>
+            <field name="model_id" ref="hr.model_hr_employee"/>
+            <field name="groups" eval="[(4, ref('attendance_system.group_attendance_employee'))]"/>
+            <field name="domain_force">[('department_id', '=', user.employee_id.department_id.id)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_employee_hr_all" model="ir.rule">
+            <field name="name">Employee: HR full access</field>
+            <field name="model_id" ref="hr.model_hr_employee"/>
+            <field name="groups" eval="[(4, ref('attendance_system.group_attendance_hr'))]"/>
+            <field name="domain_force">[(1,'=',1)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="True"/>
+            <field name="perm_create" eval="True"/>
+            <field name="perm_unlink" eval="True"/>
+        </record>
+
+        <record id="rule_department_manager_access" model="ir.rule">
+            <field name="name">Department: Manager access own department</field>
+            <field name="model_id" ref="hr.model_hr_department"/>
+            <field name="groups" eval="[(4, ref('attendance_system.group_attendance_department_manager'))]"/>
+            <field name="domain_force">[("manager_id.user_id", "=", user.id)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_department_employee_own" model="ir.rule">
+            <field name="name">Department: Employee read own department</field>
+            <field name="model_id" ref="hr.model_hr_department"/>
+            <field name="groups" eval="[(4, ref('attendance_system.group_attendance_employee'))]"/>
+            <field name="domain_force">[('id', '=', user.employee_id.department_id.id)]</field>
+            <field name="perm_read" eval="True"/>
+            <field name="perm_write" eval="False"/>
+            <field name="perm_create" eval="False"/>
+            <field name="perm_unlink" eval="False"/>
+        </record>
+
+        <record id="rule_department_hr_all" model="ir.rule">
+            <field name="name">Department: HR full access</field>
+            <field name="model_id" ref="hr.model_hr_department"/>
             <field name="groups" eval="[(4, ref('attendance_system.group_attendance_hr'))]"/>
             <field name="domain_force">[(1,'=',1)]</field>
             <field name="perm_read" eval="True"/>

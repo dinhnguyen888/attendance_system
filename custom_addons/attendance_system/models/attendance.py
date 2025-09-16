@@ -356,6 +356,16 @@ class HrFaceAttendance(models.Model):
     wifi_ip = fields.Char("IP WiFi", help="Deprecated: Sử dụng check_in_wifi_ip và check_out_wifi_ip")
     wifi_validated = fields.Boolean("WiFi hợp lệ", default=False, help="Deprecated: Sử dụng check_in_wifi_validated và check_out_wifi_validated")
 
+    @api.constrains('employee_id', 'check_in', 'check_out')
+    def _check_validity(self):
+        """Override constraint để HR có thể bypass validation"""
+        # Nếu có context skip_attendance_validation thì bỏ qua validation
+        if self.env.context.get('skip_attendance_validation'):
+            return
+        
+        # Gọi constraint gốc cho các user khác
+        return super()._check_validity()
+
     def check_user_permissions(self, action='read'):
         user = self.env.user
         
@@ -443,16 +453,38 @@ class HrFaceAttendance(models.Model):
     def create(self, vals):
         user = self.env.user
         
+        # Admin và HR có toàn quyền tạo bản ghi chấm công cho bất kỳ ai - bypass validation
         if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
-            return super().create(vals)
+            # Tạo record với sudo để bypass validation
+            record = self.sudo().with_context(skip_attendance_validation=True)
+            return super(HrFaceAttendance, record).create(vals)
         
+        # Department manager có thể tạo bản ghi chấm công cho nhân viên trong phòng ban
         if user.has_group('attendance_system.group_attendance_department_manager'):
+            if 'employee_id' in vals:
+                employee_id = vals.get('employee_id')
+                employee = self.env['hr.employee'].browse(employee_id)
+                # Kiểm tra xem nhân viên có thuộc phòng ban mình quản lý không
+                if (employee and employee.department_id and 
+                    employee.department_id.manager_id and
+                    employee.department_id.manager_id.user_id.id == user.id):
+                    return super().create(vals)
+                else:
+                    raise AccessError("❌ Bạn chỉ có thể tạo bản ghi chấm công cho nhân viên trong phòng ban mình quản lý.")
             return super().create(vals)
         
+        # Employee chỉ được tạo bản ghi chấm công cho chính mình
         if user.has_group('attendance_system.group_attendance_employee'):
+            # Kiểm tra xem có đang tạo cho chính mình không
+            if 'employee_id' in vals:
+                employee_id = vals.get('employee_id')
+                if user.employee_id and user.employee_id.id == employee_id:
+                    return super().create(vals)
+                else:
+                    raise AccessError("❌ Bạn chỉ có thể tạo bản ghi chấm công cho chính mình.")
             return super().create(vals)
         
-        raise AccessError("❌ Bạn không có quyền tạo bản ghi chấm công")
+        raise AccessError("❌ Bạn không có quyền tạo bản ghi chấm công.")
 
     def action_show_permissions_info(self):
         """Action để hiển thị thông tin quyền của user"""
@@ -469,6 +501,98 @@ class HrFaceAttendance(models.Model):
                 'sticky': True,
             }
         }
+
+    def write(self, vals):
+        """Override write method để kiểm tra quyền và hiển thị thông báo"""
+        user = self.env.user
+        
+        # Kiểm tra quyền cho từng bản ghi
+        for record in self:
+            # Nếu là admin hoặc HR thì được phép
+            if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
+                continue
+                
+            # Nếu là department manager - ĐƯỢC PHÉP SỬA
+            if user.has_group('attendance_system.group_attendance_department_manager'):
+                # Kiểm tra xem có phải nhân viên trong phòng ban không
+                try:
+                    if (record.employee_id and 
+                        record.employee_id.department_id and 
+                        record.employee_id.department_id.manager_id and
+                        record.employee_id.department_id.manager_id.user_id.id == user.id):
+                        continue
+                    else:
+                        raise AccessError("❌ Bạn chỉ có thể sửa bản ghi chấm công của nhân viên trong phòng ban mình quản lý.")
+                except AttributeError:
+                    raise AccessError("❌ Không thể xác định phòng ban của nhân viên này.")
+            
+            # Nếu là employee thông thường - KHÔNG ĐƯỢC PHÉP SỬA
+            if user.has_group('attendance_system.group_attendance_employee'):
+                raise AccessError("❌ Bạn không thể sửa thông tin bản ghi chấm công. Vui lòng liên hệ quản lý để được hỗ trợ.")
+            
+            # Nếu không có quyền gì
+            raise AccessError("❌ Bạn không có quyền sửa bản ghi chấm công.")
+        
+        return super().write(vals)
+
+    def unlink(self):
+        """Override unlink method để kiểm tra quyền xóa"""
+        user = self.env.user
+        
+        # Kiểm tra quyền cho từng bản ghi
+        for record in self:
+            # Chỉ HR Manager mới được xóa
+            if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
+                continue
+                
+            # Department manager không được xóa
+            if user.has_group('attendance_system.group_attendance_department_manager'):
+                raise AccessError("❌ Trưởng phòng không được phép xóa bản ghi chấm công. Vui lòng liên hệ HR để được hỗ trợ.")
+            
+            # Employee không được xóa
+            if user.has_group('attendance_system.group_attendance_employee'):
+                raise AccessError("❌ Bạn không thể xóa bản ghi chấm công. Vui lòng liên hệ quản lý để được hỗ trợ.")
+            
+            # Không có quyền
+            raise AccessError("❌ Bạn không có quyền xóa bản ghi chấm công.")
+        
+        return super().unlink()
+
+class ResUsersExtended(models.Model):
+    _inherit = 'res.users'
+    
+    def write(self, vals):
+        """Override write method để kiểm tra quyền sửa thông tin user"""
+        user = self.env.user
+        
+        # Kiểm tra quyền cho từng user
+        for record in self:
+            # Admin và HR có toàn quyền
+            if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
+                continue
+                
+            # Department manager có thể sửa user trong phòng ban
+            if user.has_group('attendance_system.group_attendance_department_manager'):
+                # Có thể sửa chính mình
+                if record.id == user.id:
+                    continue
+                # Có thể sửa user trong phòng ban mình quản lý
+                if record.employee_ids and record.employee_ids[0].department_id.manager_id.user_id.id == user.id:
+                    continue
+                else:
+                    raise AccessError("❌ Bạn chỉ có thể sửa thông tin của nhân viên trong phòng ban mình quản lý.")
+            
+            # Employee chỉ có thể sửa thông tin của chính mình
+            if user.has_group('attendance_system.group_attendance_employee'):
+                if record.id == user.id:
+                    continue
+                else:
+                    raise AccessError("❌ Bạn chỉ có thể sửa thông tin cá nhân của mình. Để sửa thông tin người khác, vui lòng liên hệ quản lý.")
+            
+            # Không có quyền
+            raise AccessError("❌ Bạn không có quyền sửa thông tin người dùng.")
+        
+        return super().write(vals)
 
 class AttendanceSystemConfig(models.Model):
     _name = 'attendance.system.config'

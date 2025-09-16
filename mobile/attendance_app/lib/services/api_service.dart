@@ -457,11 +457,4 @@ class ApiService {
   }
 
   bool get isSessionValid => _token != null;
-
-  String _safeString(dynamic value) {
-    if (value == null || value == false) {
-      return 'Chưa có';
-    }
-    return value.toString();
-  }
 }
