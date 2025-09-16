@@ -40,6 +40,8 @@ class ProfileCard extends StatelessWidget {
                   _buildContactInfoSection(user),
                   const SizedBox(height: 16),
                   _buildOrganizationalInfoSection(user),
+                  const SizedBox(height: 16),
+                  _buildRegistrationInfoSection(user),
                   if (_shouldShowManager(user)) ...[
                     const SizedBox(height: 16),
                     _buildManagerSection(user),
@@ -170,6 +172,35 @@ class ProfileCard extends StatelessWidget {
           ),
         ),
         const Expanded(child: SizedBox()),
+      ],
+    );
+  }
+
+  Widget _buildRegistrationInfoSection(Employee user) {
+    final registeredText = user.faceRegistered ? 'Đã đăng ký' : 'Chưa đăng ký';
+    final registeredColor = user.faceRegistered ? Colors.white : Colors.white70;
+    final startDateText = (user.startDate != null && user.startDate!.isNotEmpty)
+        ? user.startDate!
+        : 'Chưa có';
+
+    return Row(
+      children: [
+        Expanded(
+          child: _buildInfoItem(
+            icon: Icons.verified_user,
+            label: 'Đăng ký khuôn mặt',
+            value: registeredText,
+            valueColor: registeredColor,
+          ),
+        ),
+        Expanded(
+          child: _buildInfoItem(
+            icon: Icons.event,
+            label: 'Ngày bắt đầu làm',
+            value: startDateText,
+            valueColor: Colors.white,
+          ),
+        ),
       ],
     );
   }

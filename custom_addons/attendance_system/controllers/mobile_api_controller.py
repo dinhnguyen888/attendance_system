@@ -48,6 +48,30 @@ class MobileApiController(http.Controller):
         except Exception as e:
             print(f"Error in _get_employee_from_token: {e}")
             raise Unauthorized(f"Token validation failed: {str(e)}")
+
+    def _is_face_registered(self, employee):
+        """Kiểm tra nhân viên đã đăng ký khuôn mặt chưa.
+        Thứ tự ưu tiên:
+        1) Có bản ghi active trong `hr.employee.face`
+        2) Có bất kỳ bản ghi `hr.employee.face` nào (kể cả không active)
+        3) Fallback: có dữ liệu `employee.face_image_data`
+        """
+        try:
+            active_face = request.env['hr.employee.face'].sudo().search([
+                ('employee_id', '=', employee.id),
+                ('is_active', '=', True)
+            ], limit=1)
+            if active_face:
+                return True
+            any_face = request.env['hr.employee.face'].sudo().search_count([
+                ('employee_id', '=', employee.id)
+            ])
+            if any_face and any_face > 0:
+                return True
+            # Fallback: trường binary trên employee
+            return bool(getattr(employee, 'face_image_data', False))
+        except Exception:
+            return False
     
     @http.route('/mobile/auth/login', type='http', auth='public', methods=['POST'], csrf=False)
     def mobile_login(self, **kwargs):
@@ -128,6 +152,15 @@ class MobileApiController(http.Controller):
                     department_manager = dept_employees.name
             
             token = self._create_jwt_token(employee.id)
+            # Xác định ngày bắt đầu làm (ngày tạo tài khoản Odoo)
+            start_date = ''
+            try:
+                if user.create_date:
+                    start_date = user.create_date.date().isoformat()
+            except Exception:
+                start_date = ''
+            # Xác định đã đăng ký khuôn mặt
+            face_registered = self._is_face_registered(employee)
             
             return json.dumps({
                 'success': True,
@@ -141,7 +174,8 @@ class MobileApiController(http.Controller):
                     'position': department_manager or 'Chưa có',
                     'email': employee.work_email or '',
                     'phone': employee.work_phone or '',
-                    'face_registered': bool(getattr(employee, 'face_image', False))
+                    'face_registered': face_registered,
+                    'start_date': start_date
                 }
             })
             
@@ -198,8 +232,10 @@ class MobileApiController(http.Controller):
                 'position': department_manager or 'Chưa có',
                 'email': employee.work_email or '',
                 'phone': employee.work_phone or '',
-                'face_registered': bool(getattr(employee, 'face_image', False)),
-                'last_attendance': last_attendance_time
+                'face_registered': self._is_face_registered(employee),
+                'last_attendance': last_attendance_time,
+                'start_date': (employee.user_id.create_date.date().isoformat()
+                               if employee.user_id and employee.user_id.create_date else '')
             })
             
         except Unauthorized as e:

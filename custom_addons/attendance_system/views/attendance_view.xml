@@ -16,14 +16,14 @@
                 <field name="check_out_wifi_validated" readonly="1" invisible="not check_out"/>
             </xpath>
             
-            <!-- Thêm button hiển thị thông tin quyền -->
+            <!-- Button hiển thị thông tin quyền -->
             <xpath expr="//sheet" position="inside">
                 <div class="oe_button_box" name="button_box">
                     <button name="action_show_permissions_info" 
                             type="object" 
-                            string="ℹ️ Thông tin quyền" 
+                            string="ℹ️ Quyền" 
                             class="btn-info"
-                            help="Xem thông tin quyền của bạn đối với bản ghi này"/>
+                            help="Xem thông tin quyền của bạn"/>
                 </div>
             </xpath>
         </field>
