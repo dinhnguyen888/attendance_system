@@ -22,8 +22,44 @@
                         <div class="o_webcam_camera_container">
                             <video id="webcam" autoplay="autoplay" muted="muted" class="o_webcam_video"></video>
                             <canvas id="canvas" class="o_webcam_canvas" style="display: none;"></canvas>
+                            <canvas id="facemesh-canvas" class="o_webcam_facemesh_canvas"></canvas>
                             <div class="o_webcam_guide">
                                 <div class="o_webcam_guide_frame"></div>
+                            </div>
+                            <div class="o_webcam_face_status">
+                                <div id="face-status" class="o_face_status_indicator">
+                                    <i class="fa fa-search"></i>
+                                    <span>Detecting face...</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Liveness Challenge UI -->
+                            <div class="o_liveness_challenge_container" id="liveness-container" style="display: none;">
+                                <div class="o_liveness_challenge_card">
+                                    <div class="o_liveness_header">
+                                        <h3>Liveness Verification</h3>
+                                        <div class="o_liveness_progress">
+                                            <span id="challenge-progress">Challenge 1 of 2</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="o_liveness_instruction">
+                                        <div class="o_liveness_icon">
+                                            <i id="challenge-icon" class="fa fa-eye"></i>
+                                        </div>
+                                        <div class="o_liveness_text">
+                                            <h4 id="challenge-title">Please blink your eyes</h4>
+                                            <p id="challenge-description">Blink naturally to verify you're a real person</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="o_liveness_status">
+                                        <div id="challenge-status" class="o_challenge_status_indicator">
+                                            <i class="fa fa-clock-o"></i>
+                                            <span>Waiting for action...</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -31,7 +67,12 @@
                     <!-- Action Buttons -->
                     <div class="o_webcam_actions">
                         <div class="o_webcam_button_group">
-                            <button id="capture" class="btn btn-primary o_webcam_btn o_webcam_btn_capture">
+                            <button id="start-challenge" class="btn btn-success o_webcam_btn o_webcam_btn_start" style="display: none;">
+                                <i class="fa fa-play me-2"></i>
+                                <span>Start Liveness Check</span>
+                            </button>
+                            
+                            <button id="capture" class="btn btn-primary o_webcam_btn o_webcam_btn_capture" style="display: none;">
                                 <i class="fa fa-camera me-2"></i>
                                 <span>Capture</span>
                             </button>
@@ -152,6 +193,171 @@
                     border-radius: 0.5rem;
                     box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
                     border: 2px solid #ffffff;
+                }
+                
+                .o_webcam_facemesh_canvas {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    max-width: 100%;
+                    max-height: 100%;
+                    width: auto;
+                    height: auto;
+                    transform: scaleX(-1);
+                    pointer-events: none;
+                    z-index: 10;
+                    display: none; /* Hide the face mesh overlay */
+                }
+                
+                .o_webcam_face_status {
+                    position: absolute;
+                    top: 10px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    z-index: 20;
+                }
+                
+                .o_face_status_indicator {
+                    background: rgba(0, 0, 0, 0.8);
+                    color: white;
+                    padding: 0.5rem 1rem;
+                    border-radius: 1.5rem;
+                    font-size: 0.875rem;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    backdrop-filter: blur(10px);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    transition: all 0.3s ease;
+                }
+                
+                .o_face_status_indicator.detected {
+                    background: rgba(16, 185, 129, 0.9);
+                    border-color: rgba(16, 185, 129, 0.5);
+                }
+                
+                .o_face_status_indicator.warning {
+                    background: rgba(245, 158, 11, 0.9);
+                    border-color: rgba(245, 158, 11, 0.5);
+                }
+                
+                .o_face_status_indicator.error {
+                    background: rgba(239, 68, 68, 0.9);
+                    border-color: rgba(239, 68, 68, 0.5);
+                }
+                
+                /* Liveness Challenge Styles */
+                .o_liveness_challenge_container {
+                    position: absolute;
+                    top: -5%;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    z-index: 30;
+                    width: 90%;
+                    max-width: 400px;
+                }
+                
+                .o_liveness_challenge_card {
+                    background: rgba(255, 255, 255, 0.95);
+                    backdrop-filter: blur(10px);
+                    border-radius: 1rem;
+                    padding: 1.5rem;
+                    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.3);
+                    border: 1px solid rgba(255, 255, 255, 0.3);
+                    text-align: center;
+                }
+                
+                .o_liveness_header {
+                    margin-bottom: 1rem;
+                }
+                
+                .o_liveness_header h3 {
+                    color: #7c3aed;
+                    font-size: 1.25rem;
+                    font-weight: 600;
+                    margin: 0 0 0.5rem 0;
+                }
+                
+                .o_liveness_progress {
+                    color: #6b7280;
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                }
+                
+                .o_liveness_instruction {
+                    display: flex;
+                    align-items: center;
+                    gap: 1rem;
+                    margin-bottom: 1rem;
+                    text-align: left;
+                }
+                
+                .o_liveness_icon {
+                    flex-shrink: 0;
+                    width: 3rem;
+                    height: 3rem;
+                    background: #7c3aed;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-size: 1.5rem;
+                }
+                
+                .o_liveness_text h4 {
+                    color: #1f2937;
+                    font-size: 1.125rem;
+                    font-weight: 600;
+                    margin: 0 0 0.25rem 0;
+                }
+                
+                .o_liveness_text p {
+                    color: #6b7280;
+                    font-size: 0.875rem;
+                    margin: 0;
+                }
+                
+                .o_liveness_status {
+                    text-align: center;
+                }
+                
+                .o_challenge_status_indicator {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    padding: 0.5rem 1rem;
+                    border-radius: 1.5rem;
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                    background: rgba(107, 114, 128, 0.1);
+                    color: #6b7280;
+                    border: 1px solid rgba(107, 114, 128, 0.2);
+                    transition: all 0.3s ease;
+                }
+                
+                .o_challenge_status_indicator.success {
+                    background: rgba(16, 185, 129, 0.1);
+                    color: #059669;
+                    border-color: rgba(16, 185, 129, 0.3);
+                }
+                
+                .o_challenge_status_indicator.waiting {
+                    background: rgba(245, 158, 11, 0.1);
+                    color: #d97706;
+                    border-color: rgba(245, 158, 11, 0.3);
+                }
+                
+                /* Start Challenge Button */
+                .o_webcam_btn_start {
+                    background-color: #059669;
+                    border-color: #059669;
+                    color: white;
+                }
+                
+                .o_webcam_btn_start:hover {
+                    background-color: #047857;
+                    border-color: #047857;
                 }
                 
                 /* Guide Frame */
@@ -423,23 +629,716 @@
                 }
             </style>
             
+            <!-- MediaPipe FaceMesh CDN -->
+            <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+            
             <script type="text/javascript">
                 <![CDATA[
                 document.addEventListener('DOMContentLoaded', function() {
                     const video = document.getElementById('webcam');
                     const canvas = document.getElementById('canvas');
+                    const faceMeshCanvas = document.getElementById('facemesh-canvas');
+                    const faceMeshCtx = faceMeshCanvas.getContext('2d');
                     const captureBtn = document.getElementById('capture');
+                    const startChallengeBtn = document.getElementById('start-challenge');
                     const checkInBtn = document.getElementById('check_in');
                     const checkOutBtn = document.getElementById('check_out');
                     const backBtn = document.getElementById('back_btn');
                     const resultDiv = document.getElementById('result');
+                    const faceStatusDiv = document.getElementById('face-status');
+                    const livenessContainer = document.getElementById('liveness-container');
+                    const challengeProgress = document.getElementById('challenge-progress');
+                    const challengeIcon = document.getElementById('challenge-icon');
+                    const challengeTitle = document.getElementById('challenge-title');
+                    const challengeDescription = document.getElementById('challenge-description');
+                    const challengeStatus = document.getElementById('challenge-status');
+                    
                     let imageData = null;
                     let userIp = '';
+                    let faceMesh = null;
+                    let camera = null;
+                    let faceDetected = false;
+                    let faceQuality = { centered: false, size: false, clear: false };
+                    
+                    // Liveness detection variables
+                    let livenessActive = false;
+                    let currentChallenges = [];
+                    let currentChallengeIndex = 0;
+                    let challengeCompleted = false;
+                    let eyeClosedFrames = 0;
+                    let eyeOpenFrames = 0;
+                    let blinkDetected = false;
+                    let headRotationBaseline = null;
+                    let smileBaseline = null;
+                    let challengeStartTime = null;
+                    
                     // Lấy IP public của user
                     fetch('https://api.ipify.org/?format=json')
                         .then(r => r.json())
                         .then(data => { userIp = data.ip || ''; })
                         .catch(() => { userIp = ''; });
+                    
+                    // Challenge definitions
+                    const CHALLENGES = {
+                        blink: {
+                            icon: 'fa-eye',
+                            title: 'Please blink your eyes',
+                            description: 'Blink naturally to verify you\'re a real person'
+                        },
+                        turn_left: {
+                            icon: 'fa-arrow-left',
+                            title: 'Turn your head left',
+                            description: 'Slowly turn your head to the left'
+                        },
+                        turn_right: {
+                            icon: 'fa-arrow-right',
+                            title: 'Turn your head right',
+                            description: 'Slowly turn your head to the right'
+                        },
+                        look_right: {
+                            icon: 'fa-eye',
+                            title: 'Look to the right',
+                            description: 'Move your eyes to look right without turning your head'
+                        },
+                        look_left: {
+                            icon: 'fa-eye',
+                            title: 'Look to the left',
+                            description: 'Move your eyes to look left without turning your head'
+                        },
+                        raise_eyebrows: {
+                            icon: 'fa-arrow-up',
+                            title: 'Raise your eyebrows',
+                            description: 'Lift your eyebrows up briefly'
+                        },
+                        smile: {
+                            icon: 'fa-smile-o',
+                            title: 'Please smile',
+                            description: 'Show a natural smile'
+                        }
+                    };
+                    
+                    // Generate random challenges
+                    function generateChallenges() {
+                        const challengeTypes = Object.keys(CHALLENGES);
+                        const selected = [];
+                        
+                        // Shuffle array to ensure randomness
+                        const shuffled = challengeTypes.sort(() => 0.5 - Math.random());
+                        
+                        // Always select exactly 2 challenges
+                        selected.push(shuffled[0]);
+                        selected.push(shuffled[1]);
+                        
+                        console.log('Selected challenges:', selected); // Debug log
+                        return selected;
+                    }
+                    
+                    // Start liveness challenge
+                    function startLivenessChallenge() {
+                        livenessActive = true;
+                        currentChallenges = generateChallenges();
+                        currentChallengeIndex = 0;
+                        challengeCompleted = false;
+                        
+                        console.log('Starting liveness challenge with:', currentChallenges);
+                        
+                        // Hide start button and show challenge UI
+                        startChallengeBtn.style.display = 'none';
+                        livenessContainer.style.display = 'block';
+                        
+                        // Reset detection variables
+                        eyeClosedFrames = 0;
+                        eyeOpenFrames = 0;
+                        blinkDetected = false;
+                        headRotationBaseline = null;
+                        smileBaseline = null;
+                        
+                        // Start first challenge
+                        showCurrentChallenge();
+                    }
+                    
+                    // Show current challenge
+                    function showCurrentChallenge() {
+                        const challengeType = currentChallenges[currentChallengeIndex];
+                        const challenge = CHALLENGES[challengeType];
+                        
+                        challengeProgress.textContent = `Challenge ${currentChallengeIndex + 1} of 2`;
+                        challengeIcon.className = `fa ${challenge.icon}`;
+                        challengeTitle.textContent = challenge.title;
+                        challengeDescription.textContent = challenge.description;
+                        
+                        // Reset challenge status
+                        updateChallengeStatus('waiting', 'Waiting for action...');
+                        challengeStartTime = Date.now();
+                        
+                        // Reset detection variables for new challenge
+                        eyeClosedFrames = 0;
+                        eyeOpenFrames = 0;
+                        blinkDetected = false;
+                        headRotationBaseline = null;
+                        smileBaseline = null;
+                    }
+                    
+                    // Update challenge status
+                    function updateChallengeStatus(type, message) {
+                        const statusIcon = challengeStatus.querySelector('i');
+                        const statusText = challengeStatus.querySelector('span');
+                        
+                        challengeStatus.className = 'o_challenge_status_indicator';
+                        
+                        if (type === 'success') {
+                            challengeStatus.classList.add('success');
+                            statusIcon.className = 'fa fa-check-circle';
+                        } else if (type === 'waiting') {
+                            challengeStatus.classList.add('waiting');
+                            statusIcon.className = 'fa fa-clock-o';
+                        } else {
+                            statusIcon.className = 'fa fa-clock-o';
+                        }
+                        
+                        statusText.textContent = message;
+                    }
+                    
+                    // Complete current challenge
+                    function completeCurrentChallenge() {
+                        console.log(`Challenge ${currentChallengeIndex + 1} completed:`, currentChallenges[currentChallengeIndex]);
+                        updateChallengeStatus('success', 'Challenge completed!');
+                        
+                        // Reset detection variables immediately to prevent multiple triggers
+                        eyeClosedFrames = 0;
+                        eyeOpenFrames = 0;
+                        blinkDetected = false;
+                        headRotationBaseline = null;
+                        smileBaseline = null;
+                        
+                        setTimeout(() => {
+                            currentChallengeIndex++;
+                            console.log(`Moving to challenge ${currentChallengeIndex + 1} of ${currentChallenges.length}`);
+                            
+                            if (currentChallengeIndex >= currentChallenges.length) {
+                                // All challenges completed
+                                console.log('All challenges completed!');
+                                completeLivenessChallenge();
+                            } else {
+                                // Show next challenge
+                                console.log('Starting next challenge:', currentChallenges[currentChallengeIndex]);
+                                showCurrentChallenge();
+                            }
+                        }, 1500);
+                    }
+                    
+                    // Complete liveness challenge
+                    function completeLivenessChallenge() {
+                        console.log('Starting hold still phase');
+                        
+                        // Start hold still phase
+                        startHoldStillPhase();
+                    }
+                    
+                    // Hold still phase after completing challenges
+                    function startHoldStillPhase() {
+                        // Update challenge UI to show hold still instruction
+                        challengeProgress.textContent = 'Final Step';
+                        challengeIcon.className = 'fa fa-hand-paper-o';
+                        challengeTitle.textContent = 'Hold still for 3 seconds';
+                        challengeDescription.textContent = 'Stay perfectly still while we prepare to capture';
+                        
+                        let countdown = 3;
+                        updateChallengeStatus('waiting', `Hold still... ${countdown}`);
+                        
+                        const countdownInterval = setInterval(() => {
+                            countdown--;
+                            if (countdown > 0) {
+                                updateChallengeStatus('waiting', `Hold still... ${countdown}`);
+                            } else {
+                                updateChallengeStatus('success', 'Perfect! Capturing now...');
+                                clearInterval(countdownInterval);
+                            }
+                        }, 1000);
+                        
+                        // Auto-capture at 2.7 seconds
+                        setTimeout(() => {
+                            console.log('Auto-capturing at 2.7 seconds');
+                            autoCapture();
+                        }, 2700);
+                        
+                        // Complete hold still phase at 3 seconds
+                        setTimeout(() => {
+                            completeHoldStillPhase();
+                        }, 3000);
+                    }
+                    
+                    // Auto capture function
+                    function autoCapture() {
+                        const context = canvas.getContext('2d');
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        context.drawImage(video, 0, 0);
+                        imageData = canvas.toDataURL('image/jpeg', 0.9);
+                        
+                        console.log('Auto-capture completed');
+                    }
+                    
+                    // Complete hold still phase
+                    function completeHoldStillPhase() {
+                        livenessActive = false;
+                        challengeCompleted = true;
+                        
+                        // Hide challenge UI and show captured image
+                        livenessContainer.style.display = 'none';
+                        video.style.display = 'none';
+                        canvas.style.display = 'block';
+                        
+                        // Enable action buttons
+                        checkInBtn.disabled = false;
+                        checkOutBtn.disabled = false;
+                        
+                        // Show retake button
+                        captureBtn.innerHTML = '<i class="fa fa-refresh me-2"></i><span>Retake</span>';
+                        captureBtn.className = 'btn btn-info o_webcam_btn o_webcam_btn_capture';
+                        captureBtn.style.display = 'inline-flex';
+                        
+                        // Remove capture listener and add retake listener
+                        captureBtn.removeEventListener('click', capturePhoto);
+                        captureBtn.addEventListener('click', resetCamera);
+                        
+                        showResult('✅ Photo captured automatically! You can now check in/out or retake.', 'success');
+                    }
+                    
+                    // Initialize FaceMesh
+                    function initializeFaceMesh() {
+                        faceMesh = new FaceMesh({
+                            locateFile: (file) => {
+                                return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+                            }
+                        });
+                        
+                        faceMesh.setOptions({
+                            maxNumFaces: 1,
+                            refineLandmarks: true,
+                            minDetectionConfidence: 0.5,
+                            minTrackingConfidence: 0.5
+                        });
+                        
+                        faceMesh.onResults(onFaceMeshResults);
+                    }
+                    
+                    // FaceMesh results callback
+                    function onFaceMeshResults(results) {
+                        // Clear canvas
+                        faceMeshCtx.save();
+                        faceMeshCtx.clearRect(0, 0, faceMeshCanvas.width, faceMeshCanvas.height);
+                        
+                        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                            const landmarks = results.multiFaceLandmarks[0];
+                            faceDetected = true;
+                            
+                            // Analyze face quality
+                            analyzeFaceQuality(landmarks);
+                            
+                            // Draw face mesh
+                            drawFaceMesh(landmarks);
+                            
+                            // Process liveness challenges if active
+                            if (livenessActive) {
+                                processLivenessChallenge(landmarks);
+                            }
+                            
+                            // Update status
+                            updateFaceStatus();
+                        } else {
+                            faceDetected = false;
+                            faceQuality = { centered: false, size: false, clear: false };
+                            updateFaceStatus();
+                        }
+                        
+                        faceMeshCtx.restore();
+                    }
+                    
+                    // Analyze face quality for validation
+                    function analyzeFaceQuality(landmarks) {
+                        const canvasWidth = faceMeshCanvas.width;
+                        const canvasHeight = faceMeshCanvas.height;
+                        
+                        // Get key face points
+                        const noseTip = landmarks[1]; // Nose tip
+                        const leftEye = landmarks[33]; // Left eye corner
+                        const rightEye = landmarks[263]; // Right eye corner
+                        const chin = landmarks[175]; // Chin
+                        const forehead = landmarks[10]; // Forehead
+                        
+                        // Check if face is centered (nose tip should be near center)
+                        const centerX = canvasWidth / 2;
+                        const centerY = canvasHeight / 2;
+                        const noseX = noseTip.x * canvasWidth;
+                        const noseY = noseTip.y * canvasHeight;
+                        
+                        const centerThreshold = Math.min(canvasWidth, canvasHeight) * 0.15;
+                        faceQuality.centered = Math.abs(noseX - centerX) < centerThreshold && 
+                                             Math.abs(noseY - centerY) < centerThreshold;
+                        
+                        // Check face size (distance between eyes)
+                        const eyeDistance = Math.abs((rightEye.x - leftEye.x) * canvasWidth);
+                        const minEyeDistance = canvasWidth * 0.08; // Minimum 8% of canvas width
+                        const maxEyeDistance = canvasWidth * 0.25; // Maximum 25% of canvas width
+                        faceQuality.size = eyeDistance >= minEyeDistance && eyeDistance <= maxEyeDistance;
+                        
+                        // Check face clarity (face should fill reasonable portion of frame)
+                        const faceHeight = Math.abs((chin.y - forehead.y) * canvasHeight);
+                        const minFaceHeight = canvasHeight * 0.2; // Minimum 20% of canvas height
+                        faceQuality.clear = faceHeight >= minFaceHeight;
+                    }
+                    
+                    // Draw face mesh overlay
+                    function drawFaceMesh(landmarks) {
+                        const canvasWidth = faceMeshCanvas.width;
+                        const canvasHeight = faceMeshCanvas.height;
+                        
+                        // Draw face contour
+                        faceMeshCtx.strokeStyle = faceDetected && isValidFace() ? '#10b981' : '#f59e0b';
+                        faceMeshCtx.lineWidth = 2;
+                        faceMeshCtx.beginPath();
+                        
+                        // Face oval contour points
+                        const contourPoints = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+                        
+                        for (let i = 0; i < contourPoints.length; i++) {
+                            const point = landmarks[contourPoints[i]];
+                            const x = point.x * canvasWidth;
+                            const y = point.y * canvasHeight;
+                            
+                            if (i === 0) {
+                                faceMeshCtx.moveTo(x, y);
+                            } else {
+                                faceMeshCtx.lineTo(x, y);
+                            }
+                        }
+                        faceMeshCtx.closePath();
+                        faceMeshCtx.stroke();
+                        
+                        // Draw key points
+                        faceMeshCtx.fillStyle = faceDetected && isValidFace() ? '#10b981' : '#f59e0b';
+                        const keyPoints = [1, 33, 263, 61, 291]; // Nose, eyes, mouth corners
+                        
+                        keyPoints.forEach(pointIndex => {
+                            const point = landmarks[pointIndex];
+                            const x = point.x * canvasWidth;
+                            const y = point.y * canvasHeight;
+                            
+                            faceMeshCtx.beginPath();
+                            faceMeshCtx.arc(x, y, 3, 0, 2 * Math.PI);
+                            faceMeshCtx.fill();
+                        });
+                    }
+                    
+                    // Check if face meets quality requirements
+                    function isValidFace() {
+                        return faceDetected && faceQuality.centered && faceQuality.size && faceQuality.clear;
+                    }
+                    
+                    // Process liveness challenges
+                    function processLivenessChallenge(landmarks) {
+                        if (!livenessActive || currentChallengeIndex >= currentChallenges.length) return;
+                        
+                        const challengeType = currentChallenges[currentChallengeIndex];
+                        
+                        // Add safety check to prevent processing during transition
+                        if (Date.now() - challengeStartTime < 500) return;
+                        
+                        switch (challengeType) {
+                            case 'blink':
+                                processBlink(landmarks);
+                                break;
+                            case 'turn_left':
+                                processHeadTurn(landmarks, 'left');
+                                break;
+                            case 'turn_right':
+                                processHeadTurn(landmarks, 'right');
+                                break;
+                            case 'look_left':
+                                processEyeMovement(landmarks, 'right');
+                                break;
+                            case 'look_right':
+                                processEyeMovement(landmarks, 'left');
+                                break;
+                            case 'raise_eyebrows':
+                                processEyebrowRaise(landmarks);
+                                break;
+                            case 'smile':
+                                processSmile(landmarks);
+                                break;
+                        }
+                    }
+                    
+                    // Process blink detection
+                    function processBlink(landmarks) {
+                        // Skip if challenge just started (need time to establish baseline)
+                        if (Date.now() - challengeStartTime < 1000) return;
+                        
+                        // Eye landmarks for more accurate detection
+                        const leftEyeTop = landmarks[159];
+                        const leftEyeBottom = landmarks[145];
+                        const leftEyeLeft = landmarks[33];
+                        const leftEyeRight = landmarks[133];
+                        
+                        const rightEyeTop = landmarks[386];
+                        const rightEyeBottom = landmarks[374];
+                        const rightEyeLeft = landmarks[362];
+                        const rightEyeRight = landmarks[263];
+                        
+                        // Calculate eye aspect ratio (EAR)
+                        const leftEyeHeight = Math.abs(leftEyeTop.y - leftEyeBottom.y);
+                        const leftEyeWidth = Math.abs(leftEyeRight.x - leftEyeLeft.x);
+                        const leftEAR = leftEyeHeight / leftEyeWidth;
+                        
+                        const rightEyeHeight = Math.abs(rightEyeTop.y - rightEyeBottom.y);
+                        const rightEyeWidth = Math.abs(rightEyeRight.x - rightEyeLeft.x);
+                        const rightEAR = rightEyeHeight / rightEyeWidth;
+                        
+                        const avgEAR = (leftEAR + rightEAR) / 2;
+                        const eyeClosedThreshold = 0.3; // More sensitive threshold
+                        
+                        if (avgEAR < eyeClosedThreshold) {
+                            eyeClosedFrames++;
+                            eyeOpenFrames = 0;
+                        } else {
+                            if (eyeClosedFrames >= 2) { // Eyes were closed for at least 2 frames
+                                eyeOpenFrames++;
+                                if (eyeOpenFrames >= 2) { // Eyes are open again for 2 frames
+                                    blinkDetected = true;
+                                    completeCurrentChallenge();
+                                }
+                            } else {
+                                eyeClosedFrames = 0;
+                                eyeOpenFrames = 0;
+                            }
+                        }
+                    }
+                    
+                    // Process head turn detection
+                    function processHeadTurn(landmarks, direction) {
+                        // Skip if challenge just started (need time to establish baseline)
+                        if (Date.now() - challengeStartTime < 1000) return;
+                        
+                        // Use nose tip and face center points to detect rotation
+                        const noseTip = landmarks[1];
+                        const leftFace = landmarks[234];
+                        const rightFace = landmarks[454];
+                        
+                        // Calculate face center and nose position relative to it
+                        const faceCenterX = (leftFace.x + rightFace.x) / 2;
+                        const noseOffset = noseTip.x - faceCenterX;
+                        
+                        // Set baseline on first frames (after 1 second delay)
+                        if (headRotationBaseline === null) {
+                            headRotationBaseline = noseOffset;
+                            return;
+                        }
+                        
+                        const rotationDiff = noseOffset - headRotationBaseline;
+                        const rotationThreshold = 0.04; // More sensitive threshold
+                        
+                        // Need to maintain the rotation for several frames to confirm
+                        if (direction === 'left' && rotationDiff > rotationThreshold) {
+                            eyeClosedFrames++; // Reuse counter for head turn frames
+                            if (eyeClosedFrames >= 8) { // Hold position for 8 frames
+                                completeCurrentChallenge();
+                            }
+                        } else if (direction === 'right' && rotationDiff < -rotationThreshold) {
+                            eyeClosedFrames++; // Reuse counter for head turn frames
+                            if (eyeClosedFrames >= 8) { // Hold position for 8 frames
+                                completeCurrentChallenge();
+                            }
+                        } else {
+                            eyeClosedFrames = 0; // Reset if not in correct position
+                        }
+                    }
+                    
+                    // Process eye movement detection
+                    function processEyeMovement(landmarks, direction) {
+                        // Skip if challenge just started (need time to establish baseline)
+                        if (Date.now() - challengeStartTime < 500) return;
+                        
+                        // Use pupil landmarks - more accurate for eye tracking
+                        const leftPupil = landmarks[468];
+                        const rightPupil = landmarks[473];
+                        
+                        // Eye corner landmarks for reference
+                        const leftEyeLeft = landmarks[33];
+                        const leftEyeRight = landmarks[133];
+                        const rightEyeLeft = landmarks[362];
+                        const rightEyeRight = landmarks[263];
+                        
+                        if (!leftPupil || !rightPupil) return;
+                        
+                        // Calculate pupil position within eye bounds
+                        const leftEyeWidth = Math.abs(leftEyeRight.x - leftEyeLeft.x);
+                        const rightEyeWidth = Math.abs(rightEyeRight.x - rightEyeLeft.x);
+                        
+                        const leftPupilPos = (leftPupil.x - leftEyeLeft.x) / leftEyeWidth;
+                        const rightPupilPos = (rightPupil.x - rightEyeLeft.x) / rightEyeWidth;
+                        const avgPupilPos = (leftPupilPos + rightPupilPos) / 2;
+                        
+                        // Set baseline on first frames
+                        if (headRotationBaseline === null) {
+                            headRotationBaseline = avgPupilPos;
+                            return;
+                        }
+                        
+                        const eyeMovementDiff = avgPupilPos - headRotationBaseline;
+                        const eyeMovementThreshold = 0.08; // Increased sensitivity
+                        
+                        // Check eye movement direction
+                        if (direction === 'left' && eyeMovementDiff < -eyeMovementThreshold) {
+                            eyeClosedFrames++; // Reuse counter for eye movement frames
+                            if (eyeClosedFrames >= 5) { // Reduced frames needed
+                                completeCurrentChallenge();
+                            }
+                        } else if (direction === 'right' && eyeMovementDiff > eyeMovementThreshold) {
+                            eyeClosedFrames++; // Reuse counter for eye movement frames
+                            if (eyeClosedFrames >= 5) { // Reduced frames needed
+                                completeCurrentChallenge();
+                            }
+                        } else {
+                            eyeClosedFrames = 0; // Reset if not looking in correct direction
+                        }
+                    }
+                    
+                    // Process eyebrow raise detection
+                    function processEyebrowRaise(landmarks) {
+                        // Skip if challenge just started (need time to establish baseline)
+                        if (Date.now() - challengeStartTime < 500) return;
+                        
+                        // Better eyebrow landmarks for detection
+                        const leftEyebrowInner = landmarks[70];  // Left eyebrow inner
+                        const leftEyebrowOuter = landmarks[46];  // Left eyebrow outer
+                        const rightEyebrowInner = landmarks[107]; // Right eyebrow inner
+                        const rightEyebrowOuter = landmarks[105]; // Right eyebrow outer
+                        
+                        // Eye landmarks for reference
+                        const leftEyeTop = landmarks[159];
+                        const rightEyeTop = landmarks[386];
+                        const leftEyeBottom = landmarks[145];
+                        const rightEyeBottom = landmarks[374];
+                        
+                        // Calculate eyebrow position relative to eye height
+                        const leftEyeHeight = Math.abs(leftEyeTop.y - leftEyeBottom.y);
+                        const rightEyeHeight = Math.abs(rightEyeTop.y - rightEyeBottom.y);
+                        const avgEyeHeight = (leftEyeHeight + rightEyeHeight) / 2;
+                        
+                        // Distance from eyebrow to eye top
+                        const leftEyebrowDist = Math.abs(leftEyebrowInner.y - leftEyeTop.y);
+                        const rightEyebrowDist = Math.abs(rightEyebrowInner.y - rightEyeTop.y);
+                        const avgEyebrowDist = (leftEyebrowDist + rightEyebrowDist) / 2;
+                        
+                        // Normalize by eye height
+                        const eyebrowRatio = avgEyebrowDist / avgEyeHeight;
+                        
+                        // Set baseline on first frames
+                        if (smileBaseline === null) {
+                            smileBaseline = eyebrowRatio;
+                            return;
+                        }
+                        
+                        const eyebrowDiff = eyebrowRatio - smileBaseline;
+                        const eyebrowThreshold = 0.15; // More sensitive threshold
+                        
+                        // Check if eyebrows are raised
+                        if (eyebrowDiff > eyebrowThreshold) {
+                            eyeClosedFrames++; // Reuse counter for eyebrow frames
+                            if (eyeClosedFrames >= 5) { // Reduced frames needed
+                                completeCurrentChallenge();
+                            }
+                        } else {
+                            eyeClosedFrames = 0; // Reset if eyebrows not raised
+                        }
+                    }
+                    
+                    // Process smile detection
+                    function processSmile(landmarks) {
+                        // Skip if challenge just started (need time to establish baseline)
+                        if (Date.now() - challengeStartTime < 1000) return;
+                        
+                        // More accurate mouth landmarks for smile detection
+                        const leftMouthCorner = landmarks[61];
+                        const rightMouthCorner = landmarks[291];
+                        const upperLipCenter = landmarks[13];
+                        const lowerLipCenter = landmarks[14];
+                        const upperLipTop = landmarks[12];
+                        const lowerLipBottom = landmarks[15];
+                        
+                        // Calculate mouth curvature (smile indicator)
+                        const mouthWidth = Math.abs(rightMouthCorner.x - leftMouthCorner.x);
+                        const mouthHeight = Math.abs(upperLipCenter.y - lowerLipCenter.y);
+                        const lipHeight = Math.abs(upperLipTop.y - lowerLipBottom.y);
+                        
+                        // Smile ratio combines width expansion and lip curvature
+                        const currentSmileRatio = (mouthWidth / mouthHeight) + (mouthWidth / lipHeight);
+                        
+                        // Set baseline on first frames (after 1 second delay)
+                        if (smileBaseline === null) {
+                            smileBaseline = currentSmileRatio;
+                            return;
+                        }
+                        
+                        const smileDiff = currentSmileRatio - smileBaseline;
+                        const smileThreshold = 0.5; // Much more sensitive threshold
+                        
+                        // Need to maintain smile for several frames to confirm
+                        if (smileDiff > smileThreshold) {
+                            eyeClosedFrames++; // Reuse counter for smile frames
+                            if (eyeClosedFrames >= 8) { // Hold smile for 8 frames
+                                completeCurrentChallenge();
+                            }
+                        } else {
+                            eyeClosedFrames = 0; // Reset if not smiling
+                        }
+                    }
+                    
+                    // Update face status indicator
+                    function updateFaceStatus() {
+                        const icon = faceStatusDiv.querySelector('i');
+                        const text = faceStatusDiv.querySelector('span');
+                        
+                        faceStatusDiv.className = 'o_face_status_indicator';
+                        
+                        if (!faceDetected) {
+                            icon.className = 'fa fa-search';
+                            text.textContent = 'Detecting face...';
+                            startChallengeBtn.style.display = 'none';
+                            captureBtn.style.display = 'none';
+                        } else if (isValidFace() && !livenessActive && !challengeCompleted) {
+                            faceStatusDiv.classList.add('detected');
+                            icon.className = 'fa fa-check-circle';
+                            text.textContent = 'Face detected - Ready for liveness check!';
+                            startChallengeBtn.style.display = 'inline-flex';
+                            captureBtn.style.display = 'none';
+                        } else if (challengeCompleted) {
+                            faceStatusDiv.classList.add('detected');
+                            icon.className = 'fa fa-check-circle';
+                            text.textContent = 'Liveness verified - Ready to capture!';
+                            startChallengeBtn.style.display = 'none';
+                            captureBtn.style.display = 'inline-flex';
+                        } else if (!isValidFace()) {
+                            faceStatusDiv.classList.add('warning');
+                            icon.className = 'fa fa-exclamation-triangle';
+                            
+                            if (!faceQuality.centered) {
+                                text.textContent = 'Please center your face';
+                            } else if (!faceQuality.size) {
+                                text.textContent = 'Move closer or further from camera';
+                            } else if (!faceQuality.clear) {
+                                text.textContent = 'Face too small - move closer';
+                            } else {
+                                text.textContent = 'Adjust face position';
+                            }
+                            startChallengeBtn.style.display = 'none';
+                            captureBtn.style.display = 'none';
+                        }
+                    }
                     
                     // Initialize camera with responsive settings
                     function initializeCamera() {
@@ -454,6 +1353,26 @@
                         navigator.mediaDevices.getUserMedia(constraints)
                         .then(stream => {
                             video.srcObject = stream;
+                            
+                            // Initialize MediaPipe camera
+                            camera = new Camera(video, {
+                                onFrame: async () => {
+                                    // Update canvas size to match video
+                                    if (faceMeshCanvas.width !== video.videoWidth || faceMeshCanvas.height !== video.videoHeight) {
+                                        faceMeshCanvas.width = video.videoWidth;
+                                        faceMeshCanvas.height = video.videoHeight;
+                                    }
+                                    
+                                    await faceMesh.send({image: video});
+                                },
+                                width: constraints.video.width.ideal,
+                                height: constraints.video.height.ideal
+                            });
+                            
+                            // Start camera after FaceMesh is initialized
+                            if (faceMesh) {
+                                camera.start();
+                            }
                         })
                         .catch(err => {
                             console.error('Camera access error:', err);
@@ -461,6 +1380,8 @@
                         });
                     }
                     
+                    // Initialize FaceMesh first, then camera
+                    initializeFaceMesh();
                     initializeCamera();
 
                     // Pre-check: API health and employee status to avoid confusing UI states
@@ -527,6 +1448,9 @@
                         }
                         setTimeout(initializeCamera, 100);
                     });
+                    
+                    // Start challenge button event
+                    startChallengeBtn.addEventListener('click', startLivenessChallenge);
                     
                     // Capture button functionality
                     function capturePhoto() {
@@ -655,9 +1579,17 @@
                         checkOutBtn.disabled = true;
                         imageData = null;
                         
+                        // Reset liveness detection state
+                        livenessActive = false;
+                        challengeCompleted = false;
+                        currentChallenges = [];
+                        currentChallengeIndex = 0;
+                        livenessContainer.style.display = 'none';
+                        
                         // Reset capture button
                         captureBtn.innerHTML = '<i class="fa fa-camera me-2"></i><span>Capture</span>';
                         captureBtn.className = 'btn btn-primary o_webcam_btn o_webcam_btn_capture';
+                        captureBtn.style.display = 'none';
                         
                         // Remove retake listener and add capture listener
                         captureBtn.removeEventListener('click', resetCamera);
