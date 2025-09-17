@@ -71,21 +71,18 @@ class FaceRecognitionService:
             
             print(f"Image validation passed: {aspect_msg}, {bg_msg}")
             
-            # Detect faces directly on original image (no resize)
-            faces = detect_faces_insightface(image)
+            # Detect faces directly on original image - select closest if multiple
+            faces = detect_faces_insightface(image, select_closest=True)
             
             if len(faces) == 0:
                 return {
                     "success": False,
-                    "message": "Không tìm thấy khuôn mặt trong ảnh"
-                }
-            
-            if len(faces) > 1:
-                return {
-                    "success": False,
-                    "message": "Phát hiện nhiều khuôn mặt. Vui lòng chụp ảnh chỉ có một khuôn mặt",
+                    "message": "Không tìm thấy khuôn mặt trong ảnh",
                     "confidence": 0.0
                 }
+            
+            # Now we always work with the closest face
+            print(f"Processing closest face for registration")
             
             # Apply skin tone normalization before feature extraction
             face_info = faces[0]
@@ -189,9 +186,35 @@ class FaceRecognitionService:
             # Process uploaded image
             image = process_uploaded_image(face_image_file)
             
-            # Preprocess and detect faces according to standard workflow
+            # STEP 1: YOLOv11n Anti-spoofing verification (MANDATORY)
+            print("=== YOLOv11n ANTI-SPOOFING VERIFICATION ===")
+            from app.core.yolov11_device_detection import AntiSpoofingVerifier
+            anti_spoofing = AntiSpoofingVerifier()
+            
+            spoofing_result = anti_spoofing.verify_no_device_spoofing(image)
+            
+            if spoofing_result['spoofing_detected']:
+                spoofing_device = spoofing_result.get('spoofing_device', 'unknown device')
+                message = f"⚠️ PHÁT HIỆN GIAN LẬN: Khuôn mặt được hiển thị qua {spoofing_device}. Vui lòng chụp ảnh trực tiếp."
+                
+                print(f"YOLOv11n ANTI-SPOOFING FAILED: {spoofing_result.get('spoofing_type', 'unknown')}")
+                return {
+                    "success": False,
+                    "message": message,
+                    "confidence": 0.0,
+                    "employee_id": employee_id,
+                    "spoofing_detected": True,
+                    "spoofing_type": spoofing_result.get('spoofing_type', 'device_presentation_attack'),
+                    "spoofing_device": spoofing_device,
+                    "anti_spoofing_details": spoofing_result
+                }
+            
+            print(f"YOLOv11n ANTI-SPOOFING PASSED: {spoofing_result.get('reason', 'No spoofing detected')}")
+            print("=== PROCEEDING TO FACE RECOGNITION ===")
+            
+            # STEP 2: Preprocess and detect faces - now accepting multiple faces but selecting closest
             _, processed_image = preprocess_image(image)
-            faces = detect_faces_insightface(processed_image)
+            faces = detect_faces_insightface(processed_image, select_closest=True)  # Select closest face
             
             if len(faces) == 0:
                 return {
@@ -201,13 +224,8 @@ class FaceRecognitionService:
                     "employee_id": employee_id
                 }
             
-            if len(faces) > 1:
-                return {
-                    "success": False,
-                    "message": "Phát hiện nhiều khuôn mặt. Vui lòng chụp ảnh chỉ có một khuôn mặt",
-                    "confidence": 0.0,
-                    "employee_id": employee_id
-                }
+            # Now we always work with the closest face (faces[0])
+            print(f"Processing closest face out of multiple detected faces")
             
             # Apply skin tone normalization before feature extraction
             face_info = faces[0]
@@ -339,6 +357,7 @@ class FaceRecognitionService:
             
             # Determine appropriate threshold based on comparison method
             if "ArcFace" in comparison_method:
+                from app.config import ARCFACE_THRESHOLD
                 threshold = ARCFACE_THRESHOLD
             elif "LBP+ORB" in comparison_method:
                 from app.config import LBP_ORB_THRESHOLD
@@ -350,7 +369,6 @@ class FaceRecognitionService:
                 return {
                     "success": True,
                     "message": f"{action.capitalize()} thành công ({comparison_method})",
-                    "confidence": final_confidence,
                     "employee_id": employee_id
                 }
             else:
@@ -439,8 +457,8 @@ class FaceRecognitionService:
             
             # Step 3: Face detection
             print("Bước 3: Phát hiện khuôn mặt...")
-            faces1 = detect_faces_insightface(processed_img1)
-            faces2 = detect_faces_insightface(processed_img2)
+            faces1 = detect_faces_insightface(processed_img1, select_closest=True)
+            faces2 = detect_faces_insightface(processed_img2, select_closest=True)
             
             if len(faces1) == 0:
                 return {"success": False, "message": "Không tìm thấy khuôn mặt trong ảnh 1", "similarity": -1.0}
