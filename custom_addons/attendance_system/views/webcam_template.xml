@@ -1285,12 +1285,12 @@
                         }
                         
                         const smileDiff = currentSmileRatio - smileBaseline;
-                        const smileThreshold = 0.5; // Much more sensitive threshold
+                        const smileThreshold = 0.2; // Much more sensitive threshold
                         
-                        // Need to maintain smile for several frames to confirm
+                        // Need to maintain smile for fewer frames to confirm
                         if (smileDiff > smileThreshold) {
                             eyeClosedFrames++; // Reuse counter for smile frames
-                            if (eyeClosedFrames >= 8) { // Hold smile for 8 frames
+                            if (eyeClosedFrames >= 4) { // Hold smile for only 4 frames
                                 completeCurrentChallenge();
                             }
                         } else {
