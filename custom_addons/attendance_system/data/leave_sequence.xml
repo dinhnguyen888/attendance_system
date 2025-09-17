@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="seq_leave_request" model="ir.sequence">
+        <field name="name">Leave Request Sequence</field>
+        <field name="code">leave.request</field>
+        <field name="prefix">LEAVE-%(y)s%(month)s%(day)s-</field>
+        <field name="padding">4</field>
+        <field name="number_next">1</field>
+        <field name="number_increment">1</field>
+    </record>
+</odoo>

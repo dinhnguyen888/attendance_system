@@ -1,0 +1,92 @@
+<odoo>
+    <record id="view_work_shift_form" model="ir.ui.view">
+        <field name="name">work.shift.form</field>
+        <field name="model">work.shift</field>
+        <field name="arch" type="xml">
+            <form string="Ca làm việc">
+                <header>
+                    <button name="toggle_active" type="object" string="Kích hoạt/Vô hiệu hóa" class="btn-secondary"/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="start_time" widget="float_time"/>
+                        <field name="end_time" widget="float_time"/>
+                        <field name="break_duration" widget="float_time"/>
+                        <field name="work_duration" readonly="1"/>
+                        <field name="is_overtime_eligible"/>
+                        <field name="active"/>
+                    </group>
+                    <group>
+                        <field name="description"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_work_shift_tree" model="ir.ui.view">
+        <field name="name">work.shift.tree</field>
+        <field name="model">work.shift</field>
+        <field name="arch" type="xml">
+            <tree string="Danh sách ca làm việc">
+                <field name="name"/>
+                <field name="start_time" widget="float_time"/>
+                <field name="end_time" widget="float_time"/>
+                <field name="work_duration" widget="float_time"/>
+                <field name="is_overtime_eligible"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_employee_work_schedule_form" model="ir.ui.view">
+        <field name="name">employee.work.schedule.form</field>
+        <field name="model">employee.work.schedule</field>
+        <field name="arch" type="xml">
+            <form string="Lịch làm việc nhân viên">
+                <sheet>
+                    <group>
+                        <field name="employee_id"/>
+                        <field name="shift_id"/>
+                        <field name="date"/>
+                        <field name="is_holiday"/>
+                        <field name="is_weekend" readonly="1"/>
+                    </group>
+                    <group>
+                        <field name="notes"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_employee_work_schedule_tree" model="ir.ui.view">
+        <field name="name">employee.work.schedule.tree</field>
+        <field name="model">employee.work.schedule</field>
+        <field name="arch" type="xml">
+            <tree string="Lịch làm việc">
+                <field name="employee_id"/>
+                <field name="shift_id"/>
+                <field name="date"/>
+                <field name="is_holiday"/>
+                <field name="is_weekend"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_work_shift" model="ir.actions.act_window">
+        <field name="name">Ca làm việc</field>
+        <field name="res_model">work.shift</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <record id="action_employee_work_schedule" model="ir.actions.act_window">
+        <field name="name">Lịch làm việc</field>
+        <field name="res_model">employee.work.schedule</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem id="menu_work_shift" name="Ca làm việc" parent="hr_attendance.menu_hr_attendance_root" action="action_work_shift" sequence="20"/>
+    <menuitem id="menu_employee_work_schedule" name="Lịch làm việc" parent="hr_attendance.menu_hr_attendance_root" action="action_employee_work_schedule" sequence="21"/>
+</odoo>

@@ -72,9 +72,9 @@
         </record>
 
         <record id="rule_face_hr_all" model="ir.rule">
-            <field name="name">Face: HR full access</field>
+            <field name="name">Face: HR/Admin full access</field>
             <field name="model_id" ref="attendance_system.model_hr_employee_face"/>
-            <field name="groups" eval="[(4, ref('attendance_system.group_attendance_hr'))]"/>
+            <field name="groups" eval="[(4, ref('attendance_system.group_attendance_hr')), (4, ref('base.group_system'))]"/>
             <field name="domain_force">[(1,'=',1)]</field>
             <field name="perm_read" eval="True"/>
             <field name="perm_write" eval="True"/>
@@ -226,5 +226,6 @@
         </record>
     </data>
 </odoo>
+
 
 
