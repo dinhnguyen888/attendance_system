@@ -10,6 +10,9 @@ import '../widgets/profile_card.dart';
 import '../widgets/attendance_calendar.dart';
 import '../services/wifi_service.dart';
 import 'camera_view.dart';
+import 'leave_request_view.dart';
+import 'attendance_adjustment_view.dart';
+import 'requests_list_view.dart';
 import '../widgets/error_dialog.dart';
 
 class HomeView extends StatefulWidget {
@@ -126,6 +129,8 @@ class _HomeViewState extends State<HomeView> {
               const AttendanceCard(),
               const SizedBox(height: 24),
               _buildQuickActions(),
+              const SizedBox(height: 24),
+              _buildRequestActions(),
               const SizedBox(height: 24),
               const AttendanceCalendar(),
             ],
@@ -282,6 +287,153 @@ class _HomeViewState extends State<HomeView> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildRequestActions() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.assignment,
+                  color: AppColors.primary,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Yêu cầu & Đơn từ',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _navigateToLeaveRequest(),
+                    icon: const Icon(Icons.event_available, size: 18),
+                    label: const Text('Đơn nghỉ phép'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.info,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _navigateToAttendanceAdjustment(),
+                    icon: const Icon(Icons.edit_calendar, size: 18),
+                    label: const Text('Chỉnh công'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.secondary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _navigateToRequestsList(),
+                icon: const Icon(Icons.list_alt, size: 18),
+                label: const Text('Xem danh sách yêu cầu'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _navigateToLeaveRequest() async {
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const LeaveRequestView(),
+        ),
+      );
+    } catch (e) {
+      _showSnackBar('Lỗi mở trang đơn nghỉ phép: $e', AppColors.error);
+    }
+  }
+
+  Future<void> _navigateToAttendanceAdjustment() async {
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const AttendanceAdjustmentView(),
+        ),
+      );
+    } catch (e) {
+      _showSnackBar('Lỗi mở trang chỉnh công: $e', AppColors.error);
+    }
+  }
+
+  Future<void> _navigateToRequestsList() async {
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const RequestsListView(),
+        ),
+      );
+    } catch (e) {
+      _showSnackBar('Lỗi mở danh sách yêu cầu: $e', AppColors.error);
+    }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              color == AppColors.success ? Icons.check_circle : Icons.error,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: color,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
     );
   }
 
