@@ -1,0 +1,49 @@
+<odoo>
+  <data>
+    <record id="view_attendance_dashboard_form" model="ir.ui.view">
+      <field name="name">attendance.dashboard.form</field>
+      <field name="model">attendance.dashboard</field>
+      <field name="arch" type="xml">
+        <form string="Dashboard chấm công">
+          <sheet>
+            <group col="4">
+              <field name="date_from"/>
+              <field name="date_to"/>
+            </group>
+
+            <separator string="KPI"/>
+
+            <div class="oe_button_box" name="button_box">
+              <button type="object" name="action_open_attendances" class="oe_stat_button" icon="fa-list">
+                <field name="total_attendances" widget="statinfo"/>
+              </button>
+
+              <button type="object" name="action_open_without_checkout" class="oe_stat_button" icon="fa-sign-out">
+                <field name="without_checkout" widget="statinfo"/>
+              </button>
+
+              <button type="object" name="action_open_no_attendance_employees" class="oe_stat_button" icon="fa-user-times">
+                <field name="employees_no_attendance" widget="statinfo"/>
+              </button>
+              <button type="object" name="action_open_missing_days" class="oe_stat_button" icon="fa-calendar-times-o">
+                <field name="total_missing_days" widget="statinfo"/>
+              </button>
+            </div>
+          </sheet>
+        </form>
+      </field>
+    </record>
+
+    <record id="action_attendance_dashboard" model="ir.actions.act_window">
+      <field name="name">Dashboard chấm công</field>
+      <field name="res_model">attendance.dashboard</field>
+      <field name="view_mode">form</field>
+      <field name="target">current</field>
+      <field name="context">{"default_date_from": context_today(), "default_date_to": context_today()}</field>
+    </record>
+
+    <menuitem id="menu_attendance_dashboard" name="Dashboard" parent="hr_attendance.menu_hr_attendance_root" action="action_attendance_dashboard" sequence="5" groups="attendance_system.group_attendance_department_manager,attendance_system.group_attendance_hr,base.group_system"/>
+  </data>
+</odoo>
+
+
