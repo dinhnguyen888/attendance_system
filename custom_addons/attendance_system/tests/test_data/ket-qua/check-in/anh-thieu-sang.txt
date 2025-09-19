@@ -1,0 +1,2 @@
+không thể chụp vì xác thực trong môi trường thiếu sáng không thể qua bước liveness check
+hãy thử trên mobile
