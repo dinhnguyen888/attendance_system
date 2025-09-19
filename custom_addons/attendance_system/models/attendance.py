@@ -102,7 +102,20 @@ class HrEmployeeFace(models.Model):
     @api.model
     def create(self, vals):
         """Override create để tự động cập nhật employee và gọi API register"""
+        # Kiểm tra xem employee đã có ảnh khuôn mặt active chưa
+        if vals.get('employee_id') and vals.get('is_active', True):
+            existing_active_face = self.search([
+                ('employee_id', '=', vals['employee_id']),
+                ('is_active', '=', True)
+            ], limit=1)
+            
+            if existing_active_face:
+                from odoo.exceptions import ValidationError
+                employee = self.env['hr.employee'].browse(vals['employee_id'])
+                raise ValidationError(f"Nhân viên '{employee.name}' đã có ảnh khuôn mặt đang sử dụng. Vui lòng vô hiệu hóa ảnh cũ trước khi đăng ký ảnh mới.")
+        
         record = super().create(vals)
+        
         if record.is_active and record.employee_id and record.face_image:
             # Cập nhật ảnh chính của employee
             record.employee_id.write({
@@ -203,26 +216,59 @@ class HrEmployeeFace(models.Model):
         }
     
     def action_delete_face(self):
-        """Xóa ảnh khuôn mặt"""
+        """Xóa ảnh khuôn mặt - Updated 2025-09-18 18:22"""
         self.ensure_one()
-        if self.is_active:
-            return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': 'Lỗi',
-                    'message': 'Không thể xóa ảnh đang được sử dụng. Vui lòng chọn ảnh khác làm ảnh chính trước.',
-                    'type': 'danger',
-                }
-            }
         
+        # Gọi API xóa face data trước khi xóa record trong Odoo
+        try:
+            # Sử dụng controller method có sẵn để gọi API
+            from odoo.addons.attendance_system.controllers.attendance_controller import AttendanceController
+            controller = AttendanceController()
+            api_result = controller._call_face_delete_api(self.employee_id.id)
+            
+            if not api_result.get('success', False):
+                _logger.warning(f"API delete face failed for employee {self.employee_id.id}: {api_result.get('message', 'Unknown error')}")
+                # Vẫn tiếp tục xóa record trong Odoo ngay cả khi API thất bại
+        except Exception as e:
+            _logger.error(f"Error calling face delete API for employee {self.employee_id.id}: {str(e)}")
+            # Vẫn tiếp tục xóa record trong Odoo ngay cả khi có lỗi API
+        
+        # Lưu tên ảnh trước khi xóa
+        face_name = self.name
+        employee_name = self.employee_id.name
+        
+        # Nếu đây là ảnh đang active, cần cập nhật lại employee
+        if self.is_active:
+            # Tìm ảnh khác để đặt làm active (nếu có)
+            other_faces = self.search([
+                ('employee_id', '=', self.employee_id.id),
+                ('id', '!=', self.id),
+                ('is_active', '=', False)
+            ], limit=1, order='create_date desc')
+            
+            if other_faces:
+                # Đặt ảnh khác làm active
+                other_faces.write({'is_active': True})
+                self.employee_id.write({
+                    'face_image_data': other_faces.face_image,
+                    'face_registration_date': fields.Datetime.now()
+                })
+            else:
+                # Không có ảnh khác, xóa ảnh chính của employee
+                self.employee_id.write({
+                    'face_image_data': False,
+                    'face_registration_date': False
+                })
+        
+        # Xóa record khỏi Odoo database
         self.unlink()
+        
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
             'params': {
                 'title': 'Thành công',
-                'message': f'Đã xóa ảnh "{self.name}"',
+                'message': f'Đã xóa ảnh "{face_name}" của nhân viên {employee_name} và dữ liệu face recognition tương ứng',
                 'type': 'success',
             }
         }

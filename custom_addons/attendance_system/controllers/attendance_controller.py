@@ -389,14 +389,23 @@ class AttendanceController(http.Controller):
             if not face_image:
                 return {'error': 'Không có ảnh khuôn mặt'}
             
-            # Kiểm tra xem nhân viên đã có ảnh khuôn mặt chưa
+            # Kiểm tra xem nhân viên đã có ảnh khuôn mặt active chưa
             existing_face = request.env['hr.employee.face'].sudo().search([
                 ('employee_id', '=', employee.id),
                 ('is_active', '=', True)
             ], limit=1)
             
-            # Nếu đã có ảnh, xóa dữ liệu cũ trên API server trước
+            # Nếu đã có ảnh active, từ chối đăng ký mới
             if existing_face:
+                return {'error': f'Nhân viên {employee.name} đã có ảnh khuôn mặt đang sử dụng. Vui lòng vô hiệu hóa ảnh cũ trước khi đăng ký ảnh mới.'}
+            
+            # Nếu có ảnh inactive, xóa dữ liệu cũ trên API server trước
+            inactive_faces = request.env['hr.employee.face'].sudo().search([
+                ('employee_id', '=', employee.id),
+                ('is_active', '=', False)
+            ])
+            
+            if inactive_faces:
                 _logger.info(f"Deleting existing face data for employee {employee.id} before registering new image")
                 delete_result = self._call_face_delete_api(employee.id)
                 
