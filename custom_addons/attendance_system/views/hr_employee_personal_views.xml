@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Form View cho Thông tin cá nhân -->
+    <record id="hr_employee_personal_form_view" model="ir.ui.view">
+        <field name="name">hr.employee.personal.form</field>
+        <field name="model">hr.employee.personal</field>
+        <field name="arch" type="xml">
+            <form string="Thông tin cá nhân nhân viên" create="false">
+                <sheet>
+                    <group>
+                        <group string="Thông tin cơ bản">
+                            <field name="employee_id" options="{'no_create': True, 'no_open': False}" readonly="1"/>
+                          
+                            <field name="name" readonly="1"/>
+                            <field name="job_title" readonly="1"/>
+                            <field name="department_id" readonly="1"/>
+                        </group>
+                        <group string="Thông tin liên lạc">
+                            <field name="work_phone" readonly="1"/>
+                            <field name="work_email" readonly="1"/>
+                            <field name="mobile_phone" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Action: mở trực tiếp form thông tin cá nhân của user hiện tại -->
+    <record id="hr_employee_personal_current_user_action" model="ir.actions.server">
+        <field name="name">Thông tin cá nhân</field>
+        <field name="model_id" ref="model_hr_employee_personal"/>
+        <field name="state">code</field>
+        <field name="code">
+employee = env['hr.employee'].search([('user_id', '=', env.user.id)], limit=1)
+if employee:
+    personal_info = env['hr.employee.personal'].search([('employee_id', '=', employee.id)], limit=1)
+    if not personal_info:
+        personal_info = env['hr.employee.personal'].create({'employee_id': employee.id})
+    action = {
+        'type': 'ir.actions.act_window',
+        'name': 'Thông tin cá nhân',
+        'res_model': 'hr.employee.personal',
+        'res_id': personal_info.id,
+        'view_mode': 'form',
+        'target': 'current',
+    }
+else:
+    action = {'type': 'ir.actions.act_window_close'}
+        </field>
+    </record>
+
+    <!-- Menu trực tiếp cho Thông tin cá nhân (chỉ hiển thị form của user đang đăng nhập) -->
+    <menuitem id="hr_employee_personal_menu"
+              name="Thông tin cá nhân"
+              parent="hr.menu_hr_root"
+              action="hr_employee_personal_current_user_action"
+              groups="base.group_user"
+              sequence="15"/>
+</odoo>

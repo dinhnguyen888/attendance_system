@@ -1,0 +1,8 @@
+Hiện trạng:
+- Ứng dụng chưa phân tích được môi trường (văn phòng hay ngoài trời).
+- Trong điều kiện ánh sáng không phù hợp, app vẫn nhận diện sai khuôn mặt:
+
+Hướng phát triển tương lai:
+- Tích hợp phân tích điều kiện môi trường để cải thiện độ chính xác.
+- Nghiên cứu và áp dụng công nghệ quét khuôn mặt 3D.
+- Hỗ trợ triển khai và nhúng trên Raspberry Pi.

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Attendance Configuration Form View -->
+    <record id="view_attendance_config_form" model="ir.ui.view">
+        <field name="name">attendance.config.form</field>
+        <field name="model">attendance.config</field>
+        <field name="arch" type="xml">
+            <form string="Cấu hình điểm danh">
+                <sheet>
+                    <!-- Thông báo quyền truy cập -->
+                    <div class="alert alert-success" role="alert">
+                        <strong>🔐 Quyền truy cập:</strong>
+                        <p>Chỉ Admin hệ thống mới có thể truy cập và cấu hình hệ thống điểm danh.</p>
+                    </div>
+                    
+                    <group>
+                        <field name="name"/>
+                        <field name="wifi_validation_enabled"/>
+         
+                    </group>
+                    <group string="Cấu hình WiFi">
+                        <field name="allowed_wifi_ips" widget="text" 
+                               placeholder="Nhập IP WiFi được phép, mỗi IP một dòng&#10;Ví dụ:&#10;192.168.1.1&#10;192.168.1.2&#10;192.168.1.3"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Attendance Configuration Tree View -->
+    <record id="view_attendance_config_tree" model="ir.ui.view">
+        <field name="name">attendance.config.tree</field>
+        <field name="model">attendance.config</field>
+        <field name="arch" type="xml">
+            <tree string="Cấu hình điểm danh">
+                <field name="name"/>
+                <field name="wifi_validation_enabled"/>
+
+            </tree>
+        </field>
+    </record>
+
+    <!-- Attendance Configuration Action -->
+    <record id="action_attendance_config" model="ir.actions.act_window">
+        <field name="name">Cấu hình điểm danh</field>
+        <field name="res_model">attendance.config</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Tạo cấu hình điểm danh
+            </p>
+            <p>
+                Cấu hình các tham số cho hệ thống điểm danh như WiFi được phép,..
+            </p>
+        </field>
+    </record>
+
+    <!-- Menu Item -->
+    <menuitem id="menu_attendance_config"
+              name="Cấu hình điểm danh"
+              parent="hr_attendance.menu_hr_attendance_root"
+              action="action_attendance_config"
+              groups="base.group_system"
+              sequence="100"/>
+</odoo>
