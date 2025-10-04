@@ -1,1 +1,3 @@
 /face_3D_match_api/models/resnet100.onnx
+**/__pycache__/
+**/*.pyc
