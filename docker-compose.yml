@@ -32,12 +32,12 @@ services:
   # Face Recognition API Service
   face_recognition_api:
     build:
-      context: ./custom_api_services
+      context: ./face_verification_services
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
-      - ./custom_api_services:/app
+      - ./face_verification_services:/app
       - employee_faces_data:/app/employee_faces
       - employee_canny_features_data:/app/employee_canny_features
       - employee_embeddings_data:/app/employee_embeddings
@@ -64,7 +64,7 @@ services:
   # Odoo Application
   odoo:
     build:
-      context: ./custom_addons
+      context: ./odoo_addons
       dockerfile: Dockerfile
     depends_on:
       - postgres
@@ -72,7 +72,7 @@ services:
     ports:
       - "8069:8069"
     volumes:
-      - ./custom_addons:/mnt/extra-addons
+      - ./odoo_addons:/mnt/extra-addons
       - ./odoo.conf:/etc/odoo/odoo.conf
       - odoo_data:/var/lib/odoo
     environment:

@@ -35,7 +35,7 @@ Hệ thống điểm danh bằng khuôn mặt tích hợp với Odoo, sử dụn
 
 
 ## Định hướng Refactor
-Do python lúc trước chạy quá nặng không có khả năng xử lý nhiều embedding trên máy yếu nên quyết định sẽ refactor toàn bộ custom_api_service thành C++ từ nhánh này
+Do python lúc trước chạy quá nặng không có khả năng xử lý nhiều embedding trên máy yếu nên quyết định sẽ refactor toàn bộ face_verification_services thành C++ từ nhánh này
 
 
 
