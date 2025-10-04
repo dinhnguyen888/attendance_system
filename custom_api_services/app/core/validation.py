@@ -46,29 +46,37 @@ def validate_background_color(image: np.ndarray) -> Tuple[bool, str]:
         
         border_pixels = np.array(border_pixels)
         
-        # Calculate average color of borders
+        # Calculate average color of borders for reporting (BGR -> RGB for readability)
         avg_color = np.mean(border_pixels, axis=0)
-        
-        # Convert from BGR to RGB for easier understanding
-        avg_color_rgb = avg_color[::-1]  # BGR to RGB
-        
-        # Define white and blue colors in RGB
-        white_rgb = np.array([255, 255, 255])
-        blue_rgb = np.array([0, 0, 255])  # Pure blue
-        light_blue_rgb = np.array([173, 216, 230])  # Light blue
-        
-        # Calculate Euclidean distance
-        dist_to_white = np.linalg.norm(avg_color_rgb - white_rgb)
-        dist_to_blue = np.linalg.norm(avg_color_rgb - blue_rgb)
-        dist_to_light_blue = np.linalg.norm(avg_color_rgb - light_blue_rgb)
-        
-        # Acceptance thresholds (adjustable)
-        if dist_to_white <= WHITE_THRESHOLD:
+        avg_color_rgb = avg_color[::-1]
+
+        # Convert border pixels to HSV for robust color classification
+        # OpenCV HSV ranges: H in [0,179], S in [0,255], V in [0,255]
+        bgr_pixels_u8 = np.array(border_pixels, dtype=np.uint8).reshape(-1, 1, 3)
+        hsv_pixels = cv2.cvtColor(bgr_pixels_u8, cv2.COLOR_BGR2HSV).reshape(-1, 3)
+        H = hsv_pixels[:, 0]
+        S = hsv_pixels[:, 1]
+        V = hsv_pixels[:, 2]
+
+        # Heuristics for white and blue backgrounds (configurable via app.config)
+        # Using constants: WHITE_S_MAX, WHITE_V_MIN, BLUE_H_MIN, BLUE_H_MAX, BLUE_S_MIN, BLUE_V_MIN, BG_RATIO_THRESHOLD
+
+        is_white = (S <= WHITE_S_MAX) & (V >= WHITE_V_MIN)
+        is_blue = (H >= BLUE_H_MIN) & (H <= BLUE_H_MAX) & (S >= BLUE_S_MIN) & (V >= BLUE_V_MIN)
+
+        total = max(len(hsv_pixels), 1)
+        white_ratio = float(np.sum(is_white)) / total
+        blue_ratio = float(np.sum(is_blue)) / total
+
+        if white_ratio >= BG_RATIO_THRESHOLD:
             return True, "Nền trắng"
-        elif dist_to_blue <= BLUE_THRESHOLD or dist_to_light_blue <= BLUE_THRESHOLD:
+        if blue_ratio >= BG_RATIO_THRESHOLD:
             return True, "Nền xanh"
-        else:
-            return False, f"Màu nền không hợp lệ. Màu trung bình: RGB({avg_color_rgb[0]:.0f}, {avg_color_rgb[1]:.0f}, {avg_color_rgb[2]:.0f}). Yêu cầu nền trắng hoặc xanh."
+
+        return False, (
+            f"Màu nền không hợp lệ. Màu trung bình: RGB({avg_color_rgb[0]:.0f}, {avg_color_rgb[1]:.0f}, {avg_color_rgb[2]:.0f}). "
+            f"White_ratio={white_ratio:.2f}, Blue_ratio={blue_ratio:.2f}. Yêu cầu nền trắng hoặc xanh."
+        )
             
     except Exception as e:
         return False, f"Lỗi kiểm tra màu nền: {str(e)}"

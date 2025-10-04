@@ -37,11 +37,11 @@ class ProfileCard extends StatelessWidget {
                 children: [
                   _buildHeaderSection(user),
                   const SizedBox(height: 20),
-                  _buildBasicInfoSection(user),
-                  const SizedBox(height: 16),
                   _buildContactInfoSection(user),
                   const SizedBox(height: 16),
                   _buildOrganizationalInfoSection(user),
+                  const SizedBox(height: 16),
+                  _buildRegistrationInfoSection(user),
                   if (_shouldShowManager(user)) ...[
                     const SizedBox(height: 16),
                     _buildManagerSection(user),
@@ -112,31 +112,6 @@ class ProfileCard extends StatelessWidget {
     );
   }
 
-  Widget _buildBasicInfoSection(Employee user) {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildInfoItem(
-            icon: Icons.badge,
-            label: 'Mã NV',
-            value:
-                user.employeeCode != 'Chưa có' ? user.employeeCode : 'Chưa có',
-            valueColor:
-                user.employeeCode != 'Chưa có' ? Colors.white : Colors.white70,
-          ),
-        ),
-        Expanded(
-          child: _buildInfoItem(
-            icon: Icons.face,
-            label: 'Khuôn mặt',
-            value: user.faceRegistered ? 'Đã đăng ký' : 'Chưa đăng ký',
-            valueColor: user.faceRegistered ? Colors.green : Colors.orange,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildContactInfoSection(Employee user) {
     return Row(
       children: [
@@ -197,6 +172,35 @@ class ProfileCard extends StatelessWidget {
           ),
         ),
         const Expanded(child: SizedBox()),
+      ],
+    );
+  }
+
+  Widget _buildRegistrationInfoSection(Employee user) {
+    final registeredText = user.faceRegistered ? 'Đã đăng ký' : 'Chưa đăng ký';
+    final registeredColor = user.faceRegistered ? Colors.white : Colors.white70;
+    final startDateText = (user.startDate != null && user.startDate!.isNotEmpty)
+        ? user.startDate!
+        : 'Chưa có';
+
+    return Row(
+      children: [
+        Expanded(
+          child: _buildInfoItem(
+            icon: Icons.verified_user,
+            label: 'Đăng ký khuôn mặt',
+            value: registeredText,
+            valueColor: registeredColor,
+          ),
+        ),
+        Expanded(
+          child: _buildInfoItem(
+            icon: Icons.event,
+            label: 'Ngày bắt đầu làm',
+            value: startDateText,
+            valueColor: Colors.white,
+          ),
+        ),
       ],
     );
   }

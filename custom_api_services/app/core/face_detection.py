@@ -7,13 +7,22 @@ from typing import List, Tuple, Optional
 from app.models.face_models import get_face_app
 from app.config import *
 
-def detect_faces_insightface(image: np.ndarray) -> List[Tuple]:
-    """Detect faces using InsightFace RetinaFace"""
+def detect_faces_insightface(image: np.ndarray, select_closest: bool = False) -> List[Tuple]:
+    """
+    Detect faces using InsightFace RetinaFace
+    
+    Args:
+        image: Input image
+        select_closest: If True, return only the closest face (largest in image)
+        
+    Returns:
+        List of face tuples (x, y, w, h, face_obj) or single closest face if select_closest=True
+    """
     try:
         app = get_face_app()
         if app is None:
             # Fallback to OpenCV Haar cascades
-            return detect_faces_opencv(image)
+            return detect_faces_opencv(image, select_closest)
         
         # Use InsightFace to detect faces
         faces = app.get(image)
@@ -31,6 +40,15 @@ def detect_faces_insightface(image: np.ndarray) -> List[Tuple]:
             opencv_faces.append((x, y, w, h, face))  # Add face object for landmarks
         
         print(f"InsightFace detected {len(opencv_faces)} faces")
+        
+        # If select_closest is True, return only the largest face (closest to camera)
+        if select_closest and len(opencv_faces) > 1:
+            # Sort by face area (w * h) in descending order
+            opencv_faces.sort(key=lambda f: f[2] * f[3], reverse=True)
+            closest_face = opencv_faces[0]
+            print(f"Selected closest face with area: {closest_face[2] * closest_face[3]}")
+            return [closest_face]
+        
         return opencv_faces
         
     except Exception as e:
@@ -38,7 +56,7 @@ def detect_faces_insightface(image: np.ndarray) -> List[Tuple]:
         # Fallback to OpenCV
         return detect_faces_opencv(image)
 
-def detect_faces_opencv(image: np.ndarray) -> List[Tuple]:
+def detect_faces_opencv(image: np.ndarray, select_closest: bool = False) -> List[Tuple]:
     """Fallback: Detect faces using OpenCV Haar cascades"""
     try:
         # Convert to BGR if needed for OpenCV
@@ -72,6 +90,15 @@ def detect_faces_opencv(image: np.ndarray) -> List[Tuple]:
         opencv_faces = [(x, y, w, h, None) for x, y, w, h in faces]
         
         print(f"OpenCV detected {len(opencv_faces)} faces")
+        
+        # If select_closest is True, return only the largest face (closest to camera)
+        if select_closest and len(opencv_faces) > 1:
+            # Sort by face area (w * h) in descending order
+            opencv_faces.sort(key=lambda f: f[2] * f[3], reverse=True)
+            closest_face = opencv_faces[0]
+            print(f"Selected closest face with area: {closest_face[2] * closest_face[3]}")
+            return [closest_face]
+        
         return opencv_faces
         
     except Exception as e:

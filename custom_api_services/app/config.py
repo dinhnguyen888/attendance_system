@@ -32,9 +32,20 @@ ASPECT_RATIO_3_4 = 3.0 / 4.0
 ASPECT_RATIO_4_6 = 4.0 / 6.0
 ASPECT_RATIO_TOLERANCE = 0.05
 
-# Background color validation
-WHITE_THRESHOLD = 50
-BLUE_THRESHOLD = 150
+
+
+# HSV-based background validation (only white/blue allowed)
+# OpenCV HSV ranges: H [0,179], S [0,255], V [0,255]
+WHITE_S_MAX = 30   # low saturation for white
+WHITE_V_MIN = 200  # high brightness for white
+
+BLUE_H_MIN = 100   # blue hue lower bound
+BLUE_H_MAX = 130   # blue hue upper bound
+BLUE_S_MIN = 60    # minimum saturation for blue
+BLUE_V_MIN = 60    # minimum brightness for blue
+
+# At least this ratio of border pixels must match white or blue to accept
+BG_RATIO_THRESHOLD = 0.7
 
 # Face detection parameters
 MIN_FACE_SIZE = (80, 80)

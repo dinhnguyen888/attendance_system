@@ -102,7 +102,20 @@ class HrEmployeeFace(models.Model):
     @api.model
     def create(self, vals):
         """Override create để tự động cập nhật employee và gọi API register"""
+        # Kiểm tra xem employee đã có ảnh khuôn mặt active chưa
+        if vals.get('employee_id') and vals.get('is_active', True):
+            existing_active_face = self.search([
+                ('employee_id', '=', vals['employee_id']),
+                ('is_active', '=', True)
+            ], limit=1)
+            
+            if existing_active_face:
+                from odoo.exceptions import ValidationError
+                employee = self.env['hr.employee'].browse(vals['employee_id'])
+                raise ValidationError(f"Nhân viên '{employee.name}' đã có ảnh khuôn mặt đang sử dụng. Vui lòng vô hiệu hóa ảnh cũ trước khi đăng ký ảnh mới.")
+        
         record = super().create(vals)
+        
         if record.is_active and record.employee_id and record.face_image:
             # Cập nhật ảnh chính của employee
             record.employee_id.write({
@@ -203,33 +216,51 @@ class HrEmployeeFace(models.Model):
         }
     
     def action_delete_face(self):
-        """Xóa ảnh khuôn mặt và dữ liệu trên API server"""
+        """Xóa ảnh khuôn mặt - Updated 2025-09-18 18:22"""
         self.ensure_one()
-     
         
-        # Gọi API để xóa dữ liệu trên face recognition server
+        # Gọi API xóa face data trước khi xóa record trong Odoo
         try:
-            from ..controllers.attendance_controller import AttendanceController
+            # Sử dụng controller method có sẵn để gọi API
+            from odoo.addons.attendance_system.controllers.attendance_controller import AttendanceController
             controller = AttendanceController()
-            delete_result = controller._call_face_delete_api(self.employee_id.id)
+            api_result = controller._call_face_delete_api(self.employee_id.id)
             
-            if not delete_result.get('success'):
-                return {
-                    'type': 'ir.actions.client',
-                    'tag': 'display_notification',
-                    'params': {
-                        'title': 'Cảnh báo',
-                        'message': f'Xóa ảnh thành công nhưng không thể xóa dữ liệu API: {delete_result.get("message", "Lỗi không xác định")}',
-                        'type': 'warning',
-                    }
-                }
+            if not api_result.get('success', False):
+                _logger.warning(f"API delete face failed for employee {self.employee_id.id}: {api_result.get('message', 'Unknown error')}")
+                # Vẫn tiếp tục xóa record trong Odoo ngay cả khi API thất bại
         except Exception as e:
-            # Nếu gọi API thất bại, vẫn tiếp tục xóa ảnh trong database
-            import logging
-            _logger = logging.getLogger(__name__)
-            _logger.warning(f"Failed to call face delete API: {str(e)}")
+            _logger.error(f"Error calling face delete API for employee {self.employee_id.id}: {str(e)}")
+            # Vẫn tiếp tục xóa record trong Odoo ngay cả khi có lỗi API
         
+        # Lưu tên ảnh trước khi xóa
         face_name = self.name
+        employee_name = self.employee_id.name
+        
+        # Nếu đây là ảnh đang active, cần cập nhật lại employee
+        if self.is_active:
+            # Tìm ảnh khác để đặt làm active (nếu có)
+            other_faces = self.search([
+                ('employee_id', '=', self.employee_id.id),
+                ('id', '!=', self.id),
+                ('is_active', '=', False)
+            ], limit=1, order='create_date desc')
+            
+            if other_faces:
+                # Đặt ảnh khác làm active
+                other_faces.write({'is_active': True})
+                self.employee_id.write({
+                    'face_image_data': other_faces.face_image,
+                    'face_registration_date': fields.Datetime.now()
+                })
+            else:
+                # Không có ảnh khác, xóa ảnh chính của employee
+                self.employee_id.write({
+                    'face_image_data': False,
+                    'face_registration_date': False
+                })
+        
+        # Xóa record khỏi Odoo database
         self.unlink()
         
         return {
@@ -237,7 +268,7 @@ class HrEmployeeFace(models.Model):
             'tag': 'display_notification',
             'params': {
                 'title': 'Thành công',
-                'message': f'Đã xóa ảnh "{face_name}" và dữ liệu API',
+                'message': f'Đã xóa ảnh "{face_name}" của nhân viên {employee_name} và dữ liệu face recognition tương ứng',
                 'type': 'success',
             }
         }
@@ -254,25 +285,6 @@ class HrEmployeeFace(models.Model):
                     'title': 'Lỗi',
                     'message': 'Không có ảnh khuôn mặt để đăng ký',
                     'type': 'danger',
-                }
-            }
-        
-        # Kiểm tra xem nhân viên đã có ảnh được đăng ký trước chưa
-        existing_registered_faces = self.env['hr.employee.face'].search([
-            ('employee_id', '=', self.employee_id.id),
-            ('action', '=', 'register'),
-            ('is_active', '=', True),
-            ('id', '!=', self.id)  # Loại trừ chính ảnh hiện tại
-        ])
-        
-        if existing_registered_faces:
-            return {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'title': 'Thông báo',
-                    'message': f'Nhân viên {self.employee_id.name} đã có ảnh khuôn mặt được đăng ký trước đó. Vui lòng xóa ảnh cũ trước khi đăng ký ảnh mới.',
-                    'type': 'warning',
                 }
             }
         
@@ -390,45 +402,50 @@ class HrFaceAttendance(models.Model):
     wifi_ip = fields.Char("IP WiFi", help="Deprecated: Sử dụng check_in_wifi_ip và check_out_wifi_ip")
     wifi_validated = fields.Boolean("WiFi hợp lệ", default=False, help="Deprecated: Sử dụng check_in_wifi_validated và check_out_wifi_validated")
 
+    @api.constrains('employee_id', 'check_in', 'check_out')
+    def _check_validity(self):
+        """Override constraint để HR có thể bypass validation"""
+        # Nếu có context skip_attendance_validation thì bỏ qua validation
+        if self.env.context.get('skip_attendance_validation'):
+            return
+        
+        # Gọi constraint gốc cho các user khác
+        return super()._check_validity()
+
     def check_user_permissions(self, action='read'):
+        """Kiểm tra quyền của user với bản ghi chấm công"""
         user = self.env.user
         
-        if user.has_group('base.group_system') or user.has_group('hr.group_hr_manager'):
+        # Admin và HR có toàn quyền
+        if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
             return {
                 'can_read': True,
                 'can_write': True,
                 'can_create': True,
                 'can_delete': True,
-                'message': 'Bạn có toàn quyền quản lý hệ thống'
+                'message': 'Toàn quyền quản lý chấm công'
             }
         
-        if user.has_group('attendance_system.group_attendance_hr'):
-            return {
-                'can_read': True,
-                'can_write': True,
-                'can_create': True,
-                'can_delete': True,
-                'message': 'Bạn có toàn quyền quản lý chấm công'
-            }
-        
+        # Trưởng phòng: xem và sửa nhân viên trong phòng ban, không được xóa
         if user.has_group('attendance_system.group_attendance_department_manager'):
-            if self.employee_id.department_id.manager_id.user_id.id == user.id:
+            if (self.employee_id.department_id and 
+                self.employee_id.department_id.manager_id.user_id.id == user.id):
                 return {
                     'can_read': True,
                     'can_write': True,
                     'can_create': False,
                     'can_delete': False,
-                    'message': 'Bạn có quyền xem và sửa chấm công của nhân viên trong phòng ban'
+                    'message': 'Quyền xem và sửa chấm công nhân viên trong phòng ban'
                 }
-            else:
-                return {
-                    'can_read': False,
-                    'can_write': False,
-                    'can_create': False,
-                    'can_delete': False,
-                    'message': 'Bạn chỉ có thể quản lý chấm công của nhân viên trong phòng ban mình'
-                }
+            return {
+                'can_read': False,
+                'can_write': False,
+                'can_create': False,
+                'can_delete': False,
+                'message': 'Chỉ quản lý được nhân viên trong phòng ban mình'
+            }
         
+        # Nhân viên: chỉ xem và tạo bản ghi của chính mình
         if user.has_group('attendance_system.group_attendance_employee'):
             if self.employee_id.user_id.id == user.id:
                 return {
@@ -436,60 +453,64 @@ class HrFaceAttendance(models.Model):
                     'can_write': True,
                     'can_create': True,
                     'can_delete': False,
-                    'message': 'Bạn có quyền check-in/check-out và xem lịch sử chấm công của chính mình'
+                    'message': 'Quyền check-in/check-out và xem lịch sử của mình'
                 }
-            else:
-                return {
-                    'can_read': False,
-                    'can_write': False,
-                    'can_create': False,
-                    'can_delete': False,
-                    'message': 'Bạn không có quyền xem dữ liệu chấm công của người khác'
-                }
+            return {
+                'can_read': False,
+                'can_write': False,
+                'can_create': False,
+                'can_delete': False,
+                'message': 'Không có quyền xem dữ liệu chấm công của người khác'
+            }
         
         return {
             'can_read': False,
             'can_write': False,
             'can_create': False,
             'can_delete': False,
-            'message': 'Bạn không có quyền truy cập hệ thống chấm công'
+            'message': 'Không có quyền truy cập hệ thống chấm công'
         }
 
-    def write(self, vals):
-        """Override write để kiểm tra quyền trước khi cho phép sửa"""
-        for record in self:
-            permissions = record.check_user_permissions('write')
-            if not permissions['can_write']:
-                raise AccessError(f"❌ Không có quyền sửa: {permissions['message']}")
-        
-        return super().write(vals)
-
-    def unlink(self):
-        """Override unlink để kiểm tra quyền trước khi cho phép xóa"""
-        for record in self:
-            permissions = record.check_user_permissions('delete')
-            if not permissions['can_delete']:
-                raise AccessError(f"❌ Không có quyền xóa: {permissions['message']}")
-        
-        return super().unlink()
 
     @api.model
     def create(self, vals):
         user = self.env.user
         
+        # Admin và HR có toàn quyền tạo bản ghi chấm công cho bất kỳ ai - bypass validation
         if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
-            return super().create(vals)
+            # Tạo record với sudo để bypass validation
+            record = self.sudo().with_context(skip_attendance_validation=True)
+            return super(HrFaceAttendance, record).create(vals)
         
+        # Department manager có thể tạo bản ghi chấm công cho nhân viên trong phòng ban
         if user.has_group('attendance_system.group_attendance_department_manager'):
+            if 'employee_id' in vals:
+                employee_id = vals.get('employee_id')
+                employee = self.env['hr.employee'].browse(employee_id)
+                # Kiểm tra xem nhân viên có thuộc phòng ban mình quản lý không
+                if (employee and employee.department_id and 
+                    employee.department_id.manager_id and
+                    employee.department_id.manager_id.user_id.id == user.id):
+                    return super().create(vals)
+                else:
+                    raise AccessError("❌ Bạn chỉ có thể tạo bản ghi chấm công cho nhân viên trong phòng ban mình quản lý.")
             return super().create(vals)
         
+        # Employee chỉ được tạo bản ghi chấm công cho chính mình
         if user.has_group('attendance_system.group_attendance_employee'):
+            # Kiểm tra xem có đang tạo cho chính mình không
+            if 'employee_id' in vals:
+                employee_id = vals.get('employee_id')
+                if user.employee_id and user.employee_id.id == employee_id:
+                    return super().create(vals)
+                else:
+                    raise AccessError("❌ Bạn chỉ có thể tạo bản ghi chấm công cho chính mình.")
             return super().create(vals)
         
-        raise AccessError("❌ Bạn không có quyền tạo bản ghi chấm công")
-
+        raise AccessError("❌ Bạn không có quyền tạo bản ghi chấm công.")
+    
     def action_show_permissions_info(self):
-        """Action để hiển thị thông tin quyền của user"""
+        """Hiển thị thông tin quyền của user với bản ghi này"""
         self.ensure_one()
         permissions = self.check_user_permissions()
         
@@ -504,6 +525,84 @@ class HrFaceAttendance(models.Model):
             }
         }
 
+
+    def write(self, vals):
+        """Override write để kiểm tra quyền sửa bản ghi chấm công"""
+        user = self.env.user
+        
+        for record in self:
+            # Admin và HR: toàn quyền
+            if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
+                continue
+            
+            # Trưởng phòng: sửa bản ghi nhân viên trong phòng ban
+            if user.has_group('attendance_system.group_attendance_department_manager'):
+                if (record.employee_id.department_id and 
+                    record.employee_id.department_id.manager_id.user_id.id == user.id):
+                    continue
+                raise AccessError("❌ Chỉ được sửa bản ghi nhân viên trong phòng ban mình quản lý")
+            
+            # Nhân viên: chỉ sửa bản ghi của mình (để check-out)
+            if user.has_group('attendance_system.group_attendance_employee'):
+                if record.employee_id.user_id.id == user.id:
+                    continue
+                raise AccessError("❌ Chỉ được sửa bản ghi chấm công của chính mình")
+            
+            raise AccessError("❌ Không có quyền sửa bản ghi chấm công")
+        
+        return super().write(vals)
+
+    def unlink(self):
+        """Override unlink để kiểm tra quyền xóa - chỉ HR được xóa"""
+        user = self.env.user
+        
+        for record in self:
+            # Chỉ Admin và HR được xóa bản ghi chấm công
+            if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
+                continue
+            
+            # Trưởng phòng và nhân viên đều không được xóa
+            if user.has_group('attendance_system.group_attendance_department_manager'):
+                raise AccessError("❌ Trưởng phòng không được xóa bản ghi chấm công")
+            
+            if user.has_group('attendance_system.group_attendance_employee'):
+                raise AccessError("❌ Nhân viên không được xóa bản ghi chấm công")
+            
+            raise AccessError("❌ Không có quyền xóa bản ghi chấm công")
+        
+        return super().unlink()
+
+class ResUsersExtended(models.Model):
+    _inherit = 'res.users'
+    
+    def write(self, vals):
+        """Override write để kiểm tra quyền sửa thông tin user"""
+        user = self.env.user
+        
+        for record in self:
+            # Admin và HR: toàn quyền
+            if user.has_group('base.group_system') or user.has_group('attendance_system.group_attendance_hr'):
+                continue
+                
+            # Trưởng phòng: sửa được user trong phòng ban và chính mình
+            if user.has_group('attendance_system.group_attendance_department_manager'):
+                if record.id == user.id:
+                    continue
+                if (record.employee_ids and 
+                    record.employee_ids[0].department_id.manager_id.user_id.id == user.id):
+                    continue
+                raise AccessError("❌ Chỉ sửa được thông tin nhân viên trong phòng ban mình quản lý")
+            
+            # Nhân viên: chỉ sửa thông tin của chính mình
+            if user.has_group('attendance_system.group_attendance_employee'):
+                if record.id == user.id:
+                    continue
+                raise AccessError("❌ Chỉ được sửa thông tin cá nhân của mình")
+            
+            raise AccessError("❌ Không có quyền sửa thông tin người dùng")
+        
+        return super().write(vals)
+
 class AttendanceSystemConfig(models.Model):
     _name = 'attendance.system.config'
     _description = 'Cấu hình hệ thống chấm công'
@@ -512,7 +611,8 @@ class AttendanceSystemConfig(models.Model):
     name = fields.Char("Tên cấu hình", required=True)
     api_url = fields.Char("URL API Face Recognition", required=True, default="http://localhost:8000")
     api_key = fields.Char("API Key", help="Khóa xác thực API")
-    face_recognition_threshold = fields.Float("Ngưỡng nhận diện khuôn mặt", default=0.6, help="Độ chính xác tối thiểu để nhận diện (0.0 - 1.0)")
+    face_recognition_threshold = fields.Float("Ngưỡng nhận diện khuôn mặt", default=0.6, 
+                                            help="Độ chính xác tối thiểu để nhận diện (0.0 - 1.0)")
     max_face_images_per_employee = fields.Integer("Số ảnh khuôn mặt tối đa/nhân viên", default=5)
     backup_enabled = fields.Boolean("Bật sao lưu tự động", default=True)
     backup_frequency = fields.Selection([
@@ -533,7 +633,6 @@ class AttendanceSystemConfig(models.Model):
         """Lấy cấu hình hệ thống"""
         config = self.search([], limit=1)
         if not config:
-            # Tạo cấu hình mặc định nếu chưa có
             config = self.create({
                 'name': 'Cấu hình mặc định',
                 'api_url': 'http://localhost:8000',
@@ -586,7 +685,6 @@ class AttendanceSystemConfig(models.Model):
     def action_backup_system(self):
         """Thực hiện sao lưu hệ thống"""
         self.ensure_one()
-        # Logic sao lưu hệ thống
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
@@ -596,5 +694,24 @@ class AttendanceSystemConfig(models.Model):
                 'type': 'info',
             }
         }
+    
+    @api.model
+    def create(self, vals):
+        """Chỉ admin được tạo cấu hình hệ thống"""
+        if not self.env.user.has_group('base.group_system'):
+            raise AccessError("❌ Chỉ Admin mới được tạo cấu hình hệ thống")
+        return super().create(vals)
+    
+    def write(self, vals):
+        """Chỉ admin được sửa cấu hình hệ thống"""
+        if not self.env.user.has_group('base.group_system'):
+            raise AccessError("❌ Chỉ Admin mới được sửa cấu hình hệ thống")
+        return super().write(vals)
+    
+    def unlink(self):
+        """Chỉ admin được xóa cấu hình hệ thống"""
+        if not self.env.user.has_group('base.group_system'):
+            raise AccessError("❌ Chỉ Admin mới được xóa cấu hình hệ thống")
+        return super().unlink()
 
 

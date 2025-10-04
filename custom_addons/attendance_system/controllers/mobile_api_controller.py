@@ -8,6 +8,9 @@ from werkzeug.exceptions import Unauthorized, BadRequest
 
 class MobileApiController(http.Controller):
     
+    def __init__(self):
+        print("DEBUG: MobileApiController initialized")
+    
     # JWT Configuration
     JWT_SECRET = "attendance-system-secret-key-2024"
     JWT_ALGORITHM = "HS256"
@@ -49,8 +52,56 @@ class MobileApiController(http.Controller):
             print(f"Error in _get_employee_from_token: {e}")
             raise Unauthorized(f"Token validation failed: {str(e)}")
     
+    def _map_leave_state(self, state):
+        """Map trạng thái leave request từ Odoo sang mobile"""
+        state_mapping = {
+            'draft': 'draft',
+            'submitted': 'submitted',
+            'manager_approved': 'manager_approved',
+            'hr_approved': 'hr_approved', 
+            'approved': 'approved',
+            'rejected': 'rejected'
+        }
+        return state_mapping.get(state, state)
+    
+    def _map_adjustment_state(self, state):
+        """Map trạng thái attendance adjustment từ Odoo sang mobile"""
+        state_mapping = {
+            'draft': 'draft',
+            'waiting_manager': 'submitted',
+            'waiting_hr': 'manager_approved',
+            'approved': 'approved',
+            'rejected': 'rejected'
+        }
+        return state_mapping.get(state, state)
+
+    def _is_face_registered(self, employee):
+        """Kiểm tra nhân viên đã đăng ký khuôn mặt chưa.
+        Thứ tự ưu tiên:
+        1) Có bản ghi active trong `hr.employee.face`
+        2) Có bất kỳ bản ghi `hr.employee.face` nào (kể cả không active)
+        3) Fallback: có dữ liệu `employee.face_image_data`
+        """
+        try:
+            active_face = request.env['hr.employee.face'].sudo().search([
+                ('employee_id', '=', employee.id),
+                ('is_active', '=', True)
+            ], limit=1)
+            if active_face:
+                return True
+            any_face = request.env['hr.employee.face'].sudo().search_count([
+                ('employee_id', '=', employee.id)
+            ])
+            if any_face and any_face > 0:
+                return True
+            # Fallback: trường binary trên employee
+            return bool(getattr(employee, 'face_image_data', False))
+        except Exception:
+            return False
+    
     @http.route('/mobile/auth/login', type='http', auth='public', methods=['POST'], csrf=False)
     def mobile_login(self, **kwargs):
+        print("DEBUG: mobile_login called")
         """API đăng nhập cho mobile app"""
         try:
             print(f"DEBUG: mobile_login called with kwargs: {kwargs}")
@@ -128,6 +179,15 @@ class MobileApiController(http.Controller):
                     department_manager = dept_employees.name
             
             token = self._create_jwt_token(employee.id)
+            # Xác định ngày bắt đầu làm (ngày tạo tài khoản Odoo)
+            start_date = ''
+            try:
+                if user.create_date:
+                    start_date = user.create_date.date().isoformat()
+            except Exception:
+                start_date = ''
+            # Xác định đã đăng ký khuôn mặt
+            face_registered = self._is_face_registered(employee)
             
             return json.dumps({
                 'success': True,
@@ -141,7 +201,8 @@ class MobileApiController(http.Controller):
                     'position': department_manager or 'Chưa có',
                     'email': employee.work_email or '',
                     'phone': employee.work_phone or '',
-                    'face_registered': bool(getattr(employee, 'face_image', False))
+                    'face_registered': face_registered,
+                    'start_date': start_date
                 }
             })
             
@@ -160,7 +221,7 @@ class MobileApiController(http.Controller):
             # Lấy token từ header
             auth_header = request.httprequest.headers.get('Authorization')
             if not auth_header or not auth_header.startswith('Bearer '):
-                return json.dumps({'error': 'Thiếu token xác thực'}), 401
+                return json.dumps({'error': 'Thiếu token xác thực'})
             
             token = auth_header.split(' ')[1]
             print(f"DEBUG: Token: {token}")
@@ -198,8 +259,10 @@ class MobileApiController(http.Controller):
                 'position': department_manager or 'Chưa có',
                 'email': employee.work_email or '',
                 'phone': employee.work_phone or '',
-                'face_registered': bool(getattr(employee, 'face_image', False)),
-                'last_attendance': last_attendance_time
+                'face_registered': self._is_face_registered(employee),
+                'last_attendance': last_attendance_time,
+                'start_date': (employee.user_id.create_date.date().isoformat()
+                               if employee.user_id and employee.user_id.create_date else '')
             })
             
         except Unauthorized as e:
@@ -214,7 +277,7 @@ class MobileApiController(http.Controller):
             # Lấy token từ header
             auth_header = request.httprequest.headers.get('Authorization')
             if not auth_header or not auth_header.startswith('Bearer '):
-                return json.dumps({'error': 'Thiếu token xác thực'}), 401
+                return json.dumps({'error': 'Thiếu token xác thực'})
             
             token = auth_header.split(' ')[1]
             employee = self._get_employee_from_token(token)
@@ -342,7 +405,7 @@ class MobileApiController(http.Controller):
             # Lấy token từ header
             auth_header = request.httprequest.headers.get('Authorization')
             if not auth_header or not auth_header.startswith('Bearer '):
-                return json.dumps({'error': 'Thiếu token xác thực'}), 401
+                return json.dumps({'error': 'Thiếu token xác thực'})
             
             token = auth_header.split(' ')[1]
             employee = self._get_employee_from_token(token)
@@ -399,7 +462,7 @@ class MobileApiController(http.Controller):
         try:
             auth_header = request.httprequest.headers.get('Authorization')
             if not auth_header or not auth_header.startswith('Bearer '):
-                return json.dumps({'error': 'Thiếu token xác thực'}), 401
+                return json.dumps({'error': 'Thiếu token xác thực'})
             
             token = auth_header.split(' ')[1]
             employee = self._get_employee_from_token(token)
@@ -443,6 +506,420 @@ class MobileApiController(http.Controller):
                 'attendances': calendar_data
             })
             
+        except Unauthorized as e:
+            return json.dumps({'error': str(e)})
+        except Exception as e:
+            return json.dumps({'error': f'Lỗi: {str(e)}'})
+
+    # Leave Request APIs
+    @http.route('/mobile/leave-requests', type='http', auth='public', methods=['GET'], csrf=False)
+    def mobile_get_leave_requests(self, **kwargs):
+        try:
+            auth_header = request.httprequest.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return json.dumps({'error': 'Thiếu token xác thực'})
+            
+            token = auth_header.split(' ')[1]
+            employee = self._get_employee_from_token(token)
+            
+            domain = [('employee_id', '=', employee.id)]
+            
+            if kwargs.get('start_date'):
+                domain.append(('start_date', '>=', kwargs['start_date']))
+            if kwargs.get('end_date'):
+                domain.append(('end_date', '<=', kwargs['end_date']))
+            
+            try:
+                leave_requests = request.env['leave.request'].sudo().search(domain, order='create_date desc')
+                print(f"DEBUG: Found {len(leave_requests)} leave requests")
+            except Exception as e:
+                print(f"DEBUG: Error searching leave requests: {e}")
+                return json.dumps([])
+            
+            result = []
+            for leave in leave_requests:
+                result.append({
+                    'id': leave.id,
+                    'employee_id': leave.employee_id.id,
+                    'name': str(leave.name) if leave.name else '',
+                    'leave_type': str(leave.leave_type) if leave.leave_type else '',
+                    'start_date': leave.start_date.strftime('%Y-%m-%d') if leave.start_date else '',
+                    'end_date': leave.end_date.strftime('%Y-%m-%d') if leave.end_date else '',
+                    'days_requested': float(leave.days_requested) if leave.days_requested else 0.0,
+                    'reason': str(leave.reason) if leave.reason else '',
+                    'state': self._map_leave_state(leave.state),
+                    'manager_approval_date': leave.manager_approval_date.strftime('%Y-%m-%d %H:%M:%S') if leave.manager_approval_date else None,
+                    'hr_approval_date': leave.hr_approval_date.strftime('%Y-%m-%d %H:%M:%S') if leave.hr_approval_date else None,
+                    'rejection_reason': str(leave.rejection_reason) if leave.rejection_reason else None,
+                    'create_date': leave.create_date.strftime('%Y-%m-%d %H:%M:%S'),
+                })
+            
+            return json.dumps(result)
+        except Unauthorized as e:
+            return json.dumps({'error': str(e)})
+        except Exception as e:
+            return json.dumps({'error': f'Lỗi: {str(e)}'})
+
+    @http.route('/mobile/leave-requests', type='http', auth='public', methods=['POST'], csrf=False)
+    def mobile_create_leave_request(self, **kwargs):
+        try:
+            auth_header = request.httprequest.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return json.dumps({'error': 'Thiếu token xác thực'})
+            
+            token = auth_header.split(' ')[1]
+            employee = self._get_employee_from_token(token)
+            
+            data = json.loads(request.httprequest.data.decode('utf-8'))
+            
+            leave_request = request.env['leave.request'].sudo().create({
+                'employee_id': employee.id,
+                'leave_type': data.get('leave_type'),
+                'start_date': data.get('start_date'),
+                'end_date': data.get('end_date'),
+                'reason': data.get('reason'),
+            })
+            
+            result = {
+                'id': leave_request.id,
+                'employee_id': leave_request.employee_id.id,
+                'name': leave_request.name,
+                'leave_type': leave_request.leave_type,
+                'start_date': leave_request.start_date.strftime('%Y-%m-%d') if leave_request.start_date else '',
+                'end_date': leave_request.end_date.strftime('%Y-%m-%d') if leave_request.end_date else '',
+                'days_requested': leave_request.days_requested,
+                'reason': leave_request.reason,
+                'state': leave_request.state,
+                'create_date': leave_request.create_date.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+            
+            return json.dumps(result)
+        except Unauthorized as e:
+            return json.dumps({'error': str(e)})
+        except Exception as e:
+            return json.dumps({'error': f'Lỗi: {str(e)}'})
+
+    @http.route('/mobile/leave-requests/<int:leave_id>', type='http', auth='public', methods=['GET'], csrf=False)
+    def mobile_get_leave_request(self, leave_id, **kwargs):
+        try:
+            auth_header = request.httprequest.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return json.dumps({'error': 'Thiếu token xác thực'})
+            
+            token = auth_header.split(' ')[1]
+            employee = self._get_employee_from_token(token)
+            
+            leave_request = request.env['leave.request'].sudo().browse(leave_id)
+            
+            if not leave_request.exists() or leave_request.employee_id.id != employee.id:
+                return json.dumps({'error': 'Leave request not found'})
+            
+            result = {
+                'id': leave_request.id,
+                'employee_id': leave_request.employee_id.id,
+                'name': leave_request.name,
+                'leave_type': leave_request.leave_type,
+                'start_date': leave_request.start_date.strftime('%Y-%m-%d') if leave_request.start_date else '',
+                'end_date': leave_request.end_date.strftime('%Y-%m-%d') if leave_request.end_date else '',
+                'days_requested': leave_request.days_requested,
+                'reason': leave_request.reason,
+                'state': leave_request.state,
+                'manager_approval_date': leave_request.manager_approval_date.strftime('%Y-%m-%d %H:%M:%S') if leave_request.manager_approval_date else None,
+                'hr_approval_date': leave_request.hr_approval_date.strftime('%Y-%m-%d %H:%M:%S') if leave_request.hr_approval_date else None,
+                'rejection_reason': leave_request.rejection_reason,
+                'create_date': leave_request.create_date.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+            
+            return json.dumps(result)
+        except Unauthorized as e:
+            return json.dumps({'error': str(e)})
+        except Exception as e:
+            return json.dumps({'error': f'Lỗi: {str(e)}'})
+
+    @http.route('/mobile/leave-requests/<int:leave_id>/submit', type='http', auth='public', methods=['POST'], csrf=False)
+    def mobile_submit_leave_request(self, leave_id, **kwargs):
+        try:
+            auth_header = request.httprequest.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return json.dumps({'error': 'Thiếu token xác thực'})
+            
+            token = auth_header.split(' ')[1]
+            employee = self._get_employee_from_token(token)
+            
+            leave_request = request.env['leave.request'].sudo().browse(leave_id)
+            
+            if not leave_request.exists() or leave_request.employee_id.id != employee.id:
+                return json.dumps({'error': 'Leave request not found'})
+            
+            if leave_request.state != 'draft':
+                return json.dumps({'error': 'Chỉ có thể gửi đơn ở trạng thái nháp'})
+            
+            leave_request.action_submit()
+            
+            result = {
+                'id': leave_request.id,
+                'state': self._map_leave_state(leave_request.state),
+                'message': 'Đơn nghỉ phép đã được gửi thành công'
+            }
+            
+            return json.dumps(result)
+        except Unauthorized as e:
+            return json.dumps({'error': str(e)})
+        except Exception as e:
+            return json.dumps({'error': f'Lỗi: {str(e)}'})
+
+    @http.route('/mobile/leave-requests/<int:leave_id>', type='http', auth='public', methods=['DELETE'], csrf=False)
+    def mobile_delete_leave_request(self, leave_id, **kwargs):
+        try:
+            auth_header = request.httprequest.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return json.dumps({'error': 'Thiếu token xác thực'})
+            
+            token = auth_header.split(' ')[1]
+            employee = self._get_employee_from_token(token)
+            
+            leave_request = request.env['leave.request'].sudo().browse(leave_id)
+            
+            if not leave_request.exists() or leave_request.employee_id.id != employee.id:
+                return json.dumps({'error': 'Leave request not found'})
+            
+            if leave_request.state != 'draft':
+                return json.dumps({'error': 'Chỉ có thể hủy đơn ở trạng thái nháp'})
+            
+            leave_request.unlink()
+            
+            return json.dumps({'message': 'Đơn nghỉ phép đã được hủy thành công'})
+        except Unauthorized as e:
+            return json.dumps({'error': str(e)})
+        except Exception as e:
+            return json.dumps({'error': f'Lỗi: {str(e)}'})
+
+    # Attendance Adjustment APIs
+    @http.route('/mobile/attendance-adjustments', type='http', auth='public', methods=['GET'], csrf=False)
+    def mobile_get_attendance_adjustments(self, **kwargs):
+        try:
+            auth_header = request.httprequest.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return json.dumps({'error': 'Thiếu token xác thực'})
+            
+            token = auth_header.split(' ')[1]
+            employee = self._get_employee_from_token(token)
+            
+            domain = [('employee_id', '=', employee.id)]
+            
+            if kwargs.get('start_date'):
+                domain.append(('attendance_id.check_in', '>=', kwargs['start_date']))
+            if kwargs.get('end_date'):
+                domain.append(('attendance_id.check_in', '<=', kwargs['end_date']))
+            
+            try:
+                adjustments = request.env['attendance.adjustment'].sudo().search(domain, order='create_date desc')
+            except Exception as e:
+                return json.dumps([])
+            
+            result = []
+            for adj in adjustments:
+                attendance_date = ''
+                original_check_in = None
+                original_check_out = None
+                
+                if adj.attendance_id:
+                    if adj.attendance_id.check_in:
+                        attendance_date = adj.attendance_id.check_in.date().strftime('%Y-%m-%d')
+                        original_check_in = adj.attendance_id.check_in.strftime('%H:%M:%S')
+                    if adj.attendance_id.check_out:
+                        original_check_out = adj.attendance_id.check_out.strftime('%H:%M:%S')
+                
+                result.append({
+                    'id': adj.id,
+                    'employee_id': adj.employee_id.id,
+                    'name': str(adj.name) if adj.name else '',
+                    'date': attendance_date,
+                    'original_check_in': original_check_in,
+                    'original_check_out': original_check_out,
+                    'requested_check_in': adj.requested_check_in.strftime('%H:%M:%S') if adj.requested_check_in else None,
+                    'requested_check_out': adj.requested_check_out.strftime('%H:%M:%S') if adj.requested_check_out else None,
+                    'reason': str(adj.reason) if adj.reason else '',
+                    'state': self._map_adjustment_state(adj.state),
+                    'create_date': adj.create_date.strftime('%Y-%m-%d %H:%M:%S'),
+                })
+            
+            return json.dumps(result)
+        except Unauthorized as e:
+            return json.dumps({'error': str(e)})
+        except Exception as e:
+            return json.dumps({'error': f'Lỗi: {str(e)}'})
+
+    @http.route('/mobile/attendance-adjustments', type='http', auth='public', methods=['POST'], csrf=False)
+    def mobile_create_attendance_adjustment(self, **kwargs):
+        try:
+            auth_header = request.httprequest.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return json.dumps({'error': 'Thiếu token xác thực'})
+            
+            token = auth_header.split(' ')[1]
+            employee = self._get_employee_from_token(token)
+            
+            data = json.loads(request.httprequest.data.decode('utf-8'))
+            
+            # Tìm attendance record cho ngày đó
+            date_str = data.get('date')
+            if not date_str:
+                return json.dumps({'error': 'Thiếu thông tin ngày'})
+            
+            from datetime import datetime
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+            attendance = request.env['hr.attendance'].sudo().search([
+                ('employee_id', '=', employee.id),
+                ('check_in', '>=', target_date),
+                ('check_in', '<', target_date + timedelta(days=1))
+            ], limit=1)
+            
+            if not attendance:
+                return json.dumps({'error': 'Không tìm thấy bản ghi chấm công cho ngày này'})
+            
+            # Xác định loại chỉnh công
+            adjustment_type = 'other'
+            if data.get('requested_check_in') and data.get('requested_check_out'):
+                adjustment_type = 'both'
+            elif data.get('requested_check_in'):
+                adjustment_type = 'check_in'
+            elif data.get('requested_check_out'):
+                adjustment_type = 'check_out'
+            
+            # Tạo datetime objects nếu có
+            requested_check_in = None
+            requested_check_out = None
+            
+            if data.get('requested_check_in'):
+                requested_check_in = datetime.combine(target_date, 
+                    datetime.strptime(data.get('requested_check_in'), '%H:%M:%S').time())
+            
+            if data.get('requested_check_out'):
+                requested_check_out = datetime.combine(target_date,
+                    datetime.strptime(data.get('requested_check_out'), '%H:%M:%S').time())
+            
+            adjustment = request.env['attendance.adjustment'].sudo().create({
+                'employee_id': employee.id,
+                'attendance_id': attendance.id,
+                'adjustment_type': adjustment_type,
+                'requested_check_in': requested_check_in,
+                'requested_check_out': requested_check_out,
+                'reason': data.get('reason', ''),
+            })
+            
+            result = {
+                'id': adjustment.id,
+                'employee_id': adjustment.employee_id.id,
+                'name': adjustment.name,
+                'date': attendance.check_in.date().strftime('%Y-%m-%d') if attendance.check_in else '',
+                'original_check_in': attendance.check_in.strftime('%H:%M:%S') if attendance.check_in else None,
+                'original_check_out': attendance.check_out.strftime('%H:%M:%S') if attendance.check_out else None,
+                'requested_check_in': adjustment.requested_check_in.strftime('%H:%M:%S') if adjustment.requested_check_in else None,
+                'requested_check_out': adjustment.requested_check_out.strftime('%H:%M:%S') if adjustment.requested_check_out else None,
+                'reason': adjustment.reason,
+                'state': self._map_adjustment_state(adjustment.state),
+                'create_date': adjustment.create_date.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+            
+            return json.dumps(result)
+        except Unauthorized as e:
+            return json.dumps({'error': str(e)})
+        except Exception as e:
+            return json.dumps({'error': f'Lỗi: {str(e)}'})
+
+    @http.route('/mobile/attendance-adjustments/<int:adj_id>', type='http', auth='public', methods=['GET'], csrf=False)
+    def mobile_get_attendance_adjustment(self, adj_id, **kwargs):
+        try:
+            auth_header = request.httprequest.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return json.dumps({'error': 'Thiếu token xác thực'})
+            
+            token = auth_header.split(' ')[1]
+            employee = self._get_employee_from_token(token)
+            
+            adjustment = request.env['attendance.adjustment'].sudo().browse(adj_id)
+            
+            if not adjustment.exists() or adjustment.employee_id.id != employee.id:
+                return json.dumps({'error': 'Attendance adjustment not found'})
+            
+            result = {
+                'id': adjustment.id,
+                'employee_id': adjustment.employee_id.id,
+                'name': adjustment.name,
+                'date': adjustment.date.strftime('%Y-%m-%d') if adjustment.date else '',
+                'original_check_in': adjustment.original_check_in.strftime('%H:%M:%S') if adjustment.original_check_in else None,
+                'original_check_out': adjustment.original_check_out.strftime('%H:%M:%S') if adjustment.original_check_out else None,
+                'requested_check_in': adjustment.requested_check_in.strftime('%H:%M:%S') if adjustment.requested_check_in else None,
+                'requested_check_out': adjustment.requested_check_out.strftime('%H:%M:%S') if adjustment.requested_check_out else None,
+                'reason': adjustment.reason,
+                'state': adjustment.state,
+                'manager_approval_date': adjustment.manager_approval_date.strftime('%Y-%m-%d %H:%M:%S') if adjustment.manager_approval_date else None,
+                'hr_approval_date': adjustment.hr_approval_date.strftime('%Y-%m-%d %H:%M:%S') if adjustment.hr_approval_date else None,
+                'rejection_reason': adjustment.rejection_reason,
+                'create_date': adjustment.create_date.strftime('%Y-%m-%d %H:%M:%S'),
+            }
+            
+            return json.dumps(result)
+        except Unauthorized as e:
+            return json.dumps({'error': str(e)})
+        except Exception as e:
+            return json.dumps({'error': f'Lỗi: {str(e)}'})
+
+    @http.route('/mobile/attendance-adjustments/<int:adj_id>/submit', type='http', auth='public', methods=['POST'], csrf=False)
+    def mobile_submit_attendance_adjustment(self, adj_id, **kwargs):
+        try:
+            auth_header = request.httprequest.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return json.dumps({'error': 'Thiếu token xác thực'})
+            
+            token = auth_header.split(' ')[1]
+            employee = self._get_employee_from_token(token)
+            
+            adjustment = request.env['attendance.adjustment'].sudo().browse(adj_id)
+            
+            if not adjustment.exists() or adjustment.employee_id.id != employee.id:
+                return json.dumps({'error': 'Attendance adjustment not found'})
+            
+            if adjustment.state != 'draft':
+                return json.dumps({'error': 'Chỉ có thể gửi yêu cầu ở trạng thái nháp'})
+            
+            adjustment.action_submit()
+            
+            result = {
+                'id': adjustment.id,
+                'state': self._map_adjustment_state(adjustment.state),
+                'message': 'Yêu cầu chỉnh công đã được gửi thành công'
+            }
+            
+            return json.dumps(result)
+        except Unauthorized as e:
+            return json.dumps({'error': str(e)})
+        except Exception as e:
+            return json.dumps({'error': f'Lỗi: {str(e)}'})
+
+    @http.route('/mobile/attendance-adjustments/<int:adj_id>', type='http', auth='public', methods=['DELETE'], csrf=False)
+    def mobile_delete_attendance_adjustment(self, adj_id, **kwargs):
+        try:
+            auth_header = request.httprequest.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return json.dumps({'error': 'Thiếu token xác thực'})
+            
+            token = auth_header.split(' ')[1]
+            employee = self._get_employee_from_token(token)
+            
+            adjustment = request.env['attendance.adjustment'].sudo().browse(adj_id)
+            
+            if not adjustment.exists() or adjustment.employee_id.id != employee.id:
+                return json.dumps({'error': 'Attendance adjustment not found'})
+            
+            if adjustment.state != 'draft':
+                return json.dumps({'error': 'Chỉ có thể hủy yêu cầu ở trạng thái nháp'})
+            
+            adjustment.unlink()
+            
+            return json.dumps({'message': 'Yêu cầu chỉnh công đã được hủy thành công'})
         except Unauthorized as e:
             return json.dumps({'error': str(e)})
         except Exception as e:

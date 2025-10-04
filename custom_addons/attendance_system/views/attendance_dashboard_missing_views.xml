@@ -1,0 +1,42 @@
+<odoo>
+  <data>
+    <record id="view_attendance_dashboard_missing_tree" model="ir.ui.view">
+      <field name="name">attendance.dashboard.missing.tree</field>
+      <field name="model">attendance.dashboard.missing</field>
+      <field name="arch" type="xml">
+        <tree string="Ngày thiếu công" create="0" edit="0" delete="0">
+          <field name="employee_id"/>
+          <field name="department_id"/>
+          <field name="date"/>
+          <field name="leave_type" optional="show"/>
+          <field name="leave_reason" optional="show"/>
+        </tree>
+      </field>
+    </record>
+
+    <record id="view_attendance_dashboard_missing_search" model="ir.ui.view">
+      <field name="name">attendance.dashboard.missing.search</field>
+      <field name="model">attendance.dashboard.missing</field>
+      <field name="arch" type="xml">
+        <search string="Tìm ngày thiếu công">
+          <field name="employee_id"/>
+          <field name="department_id"/>
+          <field name="date"/>
+          <field name="leave_type"/>
+          <field name="leave_reason"/>
+          <separator/>
+          <filter string="Có nghỉ phép" name="has_leave" domain="[('leave_reason', '!=', False)]"/>
+          <filter string="Không có nghỉ phép" name="no_leave" domain="[('leave_reason', '=', False)]"/>
+          <group expand="0" string="Group By">
+            <filter string="Nhân viên" name="grp_emp" context="{'group_by': 'employee_id'}"/>
+            <filter string="Phòng ban" name="grp_dept" context="{'group_by': 'department_id'}"/>
+            <filter string="Ngày" name="grp_date" context="{'group_by': 'date'}"/>
+            <filter string="Loại nghỉ phép" name="grp_leave_type" context="{'group_by': 'leave_type'}"/>
+          </group>
+        </search>
+      </field>
+    </record>
+  </data>
+</odoo>
+
+

@@ -40,7 +40,8 @@
                                 type="object" 
                                 string="Xóa ảnh" 
                                 class="btn-danger"
-                                invisible="not face_image"/>
+                                invisible="not face_image"
+                                confirm="Bạn có chắc chắn muốn xóa ảnh khuôn mặt này không? Hành động này không thể hoàn tác."/>
                         <field name="is_active" widget="boolean_toggle"/>
                     </header>
                     <sheet>

@@ -5,6 +5,8 @@ import '../constants/app_constants.dart';
 import '../models/auth.dart';
 import '../models/employee.dart';
 import '../models/attendance.dart';
+import '../models/leave_request.dart';
+import '../models/attendance_adjustment.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -94,6 +96,7 @@ class ApiService {
             email: data['employee']['email'] ?? '',
             phone: data['employee']['phone'] ?? '',
             faceRegistered: data['employee']['face_registered'] ?? false,
+            startDate: data['employee']['start_date'],
           );
 
           return LoginResponse(
@@ -424,6 +427,7 @@ class ApiService {
           email: data['email'] ?? '',
           phone: data['phone'] ?? '',
           faceRegistered: data['face_registered'] ?? false,
+          startDate: data['start_date'],
         );
       }
       throw Exception('Failed to get profile: ${response.statusCode}');
@@ -458,10 +462,290 @@ class ApiService {
 
   bool get isSessionValid => _token != null;
 
-  String _safeString(dynamic value) {
-    if (value == null || value == false) {
-      return 'Chưa có';
+  // Leave Request APIs
+  Future<List<LeaveRequest>> getLeaveRequests({
+    String? startDate,
+    String? endDate,
+  }) async {
+    try {
+      if (_token == null) {
+        throw Exception('Token không hợp lệ');
+      }
+
+      final queryParams = <String, String>{};
+      if (startDate != null) queryParams['start_date'] = startDate;
+      if (endDate != null) queryParams['end_date'] = endDate;
+
+      final uri = Uri.parse('${AppConstants.baseUrl}/mobile/leave-requests')
+          .replace(queryParameters: queryParams);
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List) {
+          return data.map((json) => LeaveRequest.fromJson(json)).toList();
+        } else if (data is Map && data.containsKey('error')) {
+          throw Exception(data['error']);
+        } else {
+          print('Unexpected response format: $data');
+          return [];
+        }
+      }
+      throw Exception('Failed to get leave requests: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Network error: $e');
     }
-    return value.toString();
+  }
+
+  Future<LeaveRequest> createLeaveRequest(LeaveRequestCreate request) async {
+    try {
+      if (_token == null) {
+        throw Exception('Token không hợp lệ');
+      }
+
+      final response = await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/mobile/leave-requests'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_token',
+            },
+            body: jsonEncode(request.toJson()),
+          )
+          .timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return LeaveRequest.fromJson(data);
+      }
+      throw Exception('Failed to create leave request: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  Future<LeaveRequest> getLeaveRequest(int id) async {
+    try {
+      if (_token == null) {
+        throw Exception('Token không hợp lệ');
+      }
+
+      final response = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/mobile/leave-requests/$id'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return LeaveRequest.fromJson(data);
+      }
+      throw Exception('Failed to get leave request: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> submitLeaveRequest(int id) async {
+    try {
+      if (_token == null) {
+        throw Exception('Token không hợp lệ');
+      }
+
+      final response = await http.post(
+        Uri.parse('${AppConstants.baseUrl}/mobile/leave-requests/$id/submit'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      throw Exception('Failed to submit leave request: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  Future<void> deleteLeaveRequest(int id) async {
+    try {
+      if (_token == null) {
+        throw Exception('Token không hợp lệ');
+      }
+
+      final response = await http.delete(
+        Uri.parse('${AppConstants.baseUrl}/mobile/leave-requests/$id'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+            'Failed to delete leave request: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  // Attendance Adjustment APIs
+  Future<List<AttendanceAdjustment>> getAttendanceAdjustments({
+    String? startDate,
+    String? endDate,
+  }) async {
+    try {
+      if (_token == null) {
+        throw Exception('Token không hợp lệ');
+      }
+
+      final queryParams = <String, String>{};
+      if (startDate != null) queryParams['start_date'] = startDate;
+      if (endDate != null) queryParams['end_date'] = endDate;
+
+      final uri =
+          Uri.parse('${AppConstants.baseUrl}/mobile/attendance-adjustments')
+              .replace(queryParameters: queryParams);
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List) {
+          return data
+              .map((json) => AttendanceAdjustment.fromJson(json))
+              .toList();
+        } else if (data is Map && data.containsKey('error')) {
+          throw Exception(data['error']);
+        } else {
+          print('Unexpected response format: $data');
+          return [];
+        }
+      }
+      throw Exception(
+          'Failed to get attendance adjustments: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  Future<AttendanceAdjustment> createAttendanceAdjustment(
+      AttendanceAdjustmentCreate request) async {
+    try {
+      if (_token == null) {
+        throw Exception('Token không hợp lệ');
+      }
+
+      final response = await http
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/mobile/attendance-adjustments'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_token',
+            },
+            body: jsonEncode(request.toJson()),
+          )
+          .timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return AttendanceAdjustment.fromJson(data);
+      }
+      throw Exception(
+          'Failed to create attendance adjustment: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  Future<AttendanceAdjustment> getAttendanceAdjustment(int id) async {
+    try {
+      if (_token == null) {
+        throw Exception('Token không hợp lệ');
+      }
+
+      final response = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/mobile/attendance-adjustments/$id'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return AttendanceAdjustment.fromJson(data);
+      }
+      throw Exception(
+          'Failed to get attendance adjustment: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> submitAttendanceAdjustment(int id) async {
+    try {
+      if (_token == null) {
+        throw Exception('Token không hợp lệ');
+      }
+
+      final response = await http.post(
+        Uri.parse(
+            '${AppConstants.baseUrl}/mobile/attendance-adjustments/$id/submit'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      throw Exception(
+          'Failed to submit attendance adjustment: ${response.statusCode}');
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  Future<void> deleteAttendanceAdjustment(int id) async {
+    try {
+      if (_token == null) {
+        throw Exception('Token không hợp lệ');
+      }
+
+      final response = await http.delete(
+        Uri.parse('${AppConstants.baseUrl}/mobile/attendance-adjustments/$id'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(Duration(milliseconds: AppConstants.connectionTimeout));
+
+      if (response.statusCode != 200) {
+        throw Exception(
+            'Failed to delete attendance adjustment: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
   }
 }

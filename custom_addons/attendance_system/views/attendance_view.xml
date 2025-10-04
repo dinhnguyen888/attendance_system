@@ -6,6 +6,14 @@
         <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='worked_hours']" position="after">
+                <!-- Các trường bổ sung -->
+                <field name="shift_id" readonly="1"/>
+                <field name="expected_work_hours" readonly="1"/>
+                <field name="actual_work_hours" readonly="1"/>
+                <field name="overtime_hours" readonly="1"/>
+                <field name="late_minutes" readonly="1"/>
+                <field name="early_leave_minutes" readonly="1"/>
+                <!-- Các trường hình ảnh và thông tin check-in/check-out -->
                 <field name="check_in_image" widget="image" options="{'size': [200, 200]}" readonly="1"/>
                 <field name="check_in_message" readonly="1"/>
                 <field name="check_in_wifi_ip" readonly="1"/>
@@ -16,7 +24,7 @@
                 <field name="check_out_wifi_validated" readonly="1" invisible="not check_out"/>
             </xpath>
             
-            <!-- Thêm button hiển thị thông tin quyền -->
+            <!-- Button hiển thị thông tin quyền và yêu cầu chỉnh công -->
             <xpath expr="//sheet" position="inside">
                 <div class="oe_button_box" name="button_box">
                     <button name="action_show_permissions_info" 
@@ -24,6 +32,7 @@
                             string="ℹ️ Thông tin quyền" 
                             class="btn-info"
                             help="Xem thông tin quyền của bạn đối với bản ghi này"/>
+                    <button name="%(action_attendance_adjustment)d" type="action" string="Yêu cầu chỉnh công" class="btn-secondary"/>
                 </div>
             </xpath>
         </field>
@@ -36,12 +45,16 @@
         <field name="inherit_id" ref="hr_attendance.view_attendance_tree"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='worked_hours']" position="after">
-                <!-- Thông tin check-in -->
+                <!-- Các trường bổ sung -->
+                <field name="shift_id" optional="show"/>
+                <field name="expected_work_hours" widget="float_time" optional="show"/>
+                <field name="actual_work_hours" widget="float_time" optional="show"/>
+                <field name="overtime_hours" widget="float_time" optional="show"/>
+                <field name="late_minutes" optional="hide"/>
+                <field name="early_leave_minutes" optional="hide"/>
+                <!-- Thông tin check-in/check-out -->
                 <field name="check_in_wifi_validated" optional="show" string="WiFi check-in hợp lệ"/>
-                
-                <!-- Thông tin check-out -->
                 <field name="check_out_wifi_validated" optional="show" string="WiFi check-out hợp lệ"/>
-                
                 <!-- Giữ lại trường cũ để tương thích ngược -->
                 <field name="verification_confidence" widget="percentage" optional="hide"/>
                 <field name="verification_message" optional="hide"/>

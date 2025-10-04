@@ -10,6 +10,9 @@ import '../widgets/profile_card.dart';
 import '../widgets/attendance_calendar.dart';
 import '../services/wifi_service.dart';
 import 'camera_view.dart';
+import 'leave_request_view.dart';
+import 'attendance_adjustment_view.dart';
+import 'requests_list_view.dart';
 import '../widgets/error_dialog.dart';
 
 class HomeView extends StatefulWidget {
@@ -21,6 +24,7 @@ class HomeView extends StatefulWidget {
 
 class _HomeViewState extends State<HomeView> {
   final WiFiService _wifiService = WiFiService();
+  DateTime? _lastRefreshTime;
   @override
   void initState() {
     super.initState();
@@ -36,8 +40,71 @@ class _HomeViewState extends State<HomeView> {
     try {
       await attendanceProvider.initialize();
       await authProvider.refreshUserProfile();
+      _lastRefreshTime = DateTime.now();
     } catch (e) {
       print('Error initializing data: $e');
+    }
+  }
+
+  Future<void> _refreshData() async {
+    final attendanceProvider = context.read<AttendanceProvider>();
+    final authProvider = context.read<AuthProvider>();
+
+    try {
+      await Future.wait([
+        attendanceProvider.refreshStatus(),
+        attendanceProvider.loadInitialData(),
+        authProvider.refreshUserProfile(),
+      ]);
+
+      _lastRefreshTime = DateTime.now();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.refresh, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Dữ liệu đã được cập nhật'),
+              ],
+            ),
+            backgroundColor: AppColors.success,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Text(
+                        'Lỗi cập nhật: ${e.toString().length > 50 ? e.toString().substring(0, 50) + '...' : e.toString()}')),
+              ],
+            ),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            action: SnackBarAction(
+              label: 'Thử lại',
+              textColor: Colors.white,
+              onPressed: _refreshData,
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -47,9 +114,11 @@ class _HomeViewState extends State<HomeView> {
       backgroundColor: AppColors.background,
       appBar: _buildAppBar(),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await context.read<AttendanceProvider>().initialize();
-        },
+        onRefresh: _refreshData,
+        color: AppColors.primary,
+        backgroundColor: Colors.white,
+        strokeWidth: 2.5,
+        displacement: 40.0,
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -61,6 +130,8 @@ class _HomeViewState extends State<HomeView> {
               const SizedBox(height: 24),
               _buildQuickActions(),
               const SizedBox(height: 24),
+              _buildRequestActions(),
+              const SizedBox(height: 24),
               const AttendanceCalendar(),
             ],
           ),
@@ -71,22 +142,56 @@ class _HomeViewState extends State<HomeView> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      title: const Text(
-        'Attendance System',
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Attendance System',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+          if (_lastRefreshTime != null)
+            Text(
+              'Cập nhật: ${_formatTime(_lastRefreshTime!)}',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+              ),
+            ),
+        ],
       ),
       backgroundColor: AppColors.primary,
       elevation: 0,
       actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh, color: Colors.white),
+          onPressed: _refreshData,
+          tooltip: 'Cập nhật dữ liệu',
+        ),
         IconButton(
           icon: const Icon(Icons.logout, color: Colors.white),
           onPressed: () => _showLogoutDialog(),
         ),
       ],
     );
+  }
+
+  String _formatTime(DateTime time) {
+    final now = DateTime.now();
+    final diff = now.difference(time);
+
+    if (diff.inMinutes < 1) {
+      return 'vừa xong';
+    } else if (diff.inMinutes < 60) {
+      return '${diff.inMinutes} phút trước';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours} giờ trước';
+    } else {
+      return '${time.day}/${time.month} ${time.hour}:${time.minute.toString().padLeft(2, '0')}';
+    }
   }
 
   Widget _buildQuickActions() {
@@ -119,128 +224,216 @@ class _HomeViewState extends State<HomeView> {
                     ),
                   ],
                 ),
-                if (provider.needsFaceRegistration) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.warning,
-                            color: Colors.orange.shade600, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Bạn cần đăng ký khuôn mặt trước khi chấm công',
-                            style: TextStyle(
-                              color: Colors.orange.shade700,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed:
-                          provider.isLoading ? null : () => _registerFace(),
-                      icon: provider.isLoading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Icon(Icons.face),
-                      label: Text(provider.isLoading
-                          ? 'Đang xử lý...'
-                          : 'Đăng Ký Khuôn Mặt'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                ] else ...[
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              (provider.canCheckIn && !provider.isLoading)
-                                  ? () => _checkAttendance('check_in')
-                                  : null,
-                          icon: provider.isLoading
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.login),
-                          label: Text(provider.isLoading
-                              ? 'Đang xử lý...'
-                              : 'Check In'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: provider.canCheckIn
-                                ? AppColors.checkIn
-                                : Colors.grey.shade400,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: (provider.canCheckIn && !provider.isLoading)
+                            ? () => _checkAttendance('check_in')
+                            : null,
+                        icon: provider.isLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.login),
+                        label: Text(
+                            provider.isLoading ? 'Đang xử lý...' : 'Check In'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: provider.canCheckIn
+                              ? AppColors.checkIn
+                              : Colors.grey.shade400,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              (provider.canCheckOut && !provider.isLoading)
-                                  ? () => _checkAttendance('check_out')
-                                  : null,
-                          icon: provider.isLoading
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Icon(Icons.logout),
-                          label: Text(provider.isLoading
-                              ? 'Đang xử lý...'
-                              : 'Check Out'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: provider.canCheckOut
-                                ? AppColors.checkOut
-                                : Colors.grey.shade400,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: (provider.canCheckOut && !provider.isLoading)
+                            ? () => _checkAttendance('check_out')
+                            : null,
+                        icon: provider.isLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.logout),
+                        label: Text(
+                            provider.isLoading ? 'Đang xử lý...' : 'Check Out'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: provider.canCheckOut
+                              ? AppColors.checkOut
+                              : Colors.grey.shade400,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildRequestActions() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.assignment,
+                  color: AppColors.primary,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Yêu cầu & Đơn từ',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _navigateToLeaveRequest(),
+                    icon: const Icon(Icons.event_available, size: 18),
+                    label: const Text('Đơn nghỉ phép'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.info,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _navigateToAttendanceAdjustment(),
+                    icon: const Icon(Icons.edit_calendar, size: 18),
+                    label: const Text('Chỉnh công'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.secondary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _navigateToRequestsList(),
+                icon: const Icon(Icons.list_alt, size: 18),
+                label: const Text('Xem danh sách yêu cầu'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _navigateToLeaveRequest() async {
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const LeaveRequestView(),
+        ),
+      );
+    } catch (e) {
+      _showSnackBar('Lỗi mở trang đơn nghỉ phép: $e', AppColors.error);
+    }
+  }
+
+  Future<void> _navigateToAttendanceAdjustment() async {
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const AttendanceAdjustmentView(),
+        ),
+      );
+    } catch (e) {
+      _showSnackBar('Lỗi mở trang chỉnh công: $e', AppColors.error);
+    }
+  }
+
+  Future<void> _navigateToRequestsList() async {
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const RequestsListView(),
+        ),
+      );
+    } catch (e) {
+      _showSnackBar('Lỗi mở danh sách yêu cầu: $e', AppColors.error);
+    }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              color == AppColors.success ? Icons.check_circle : Icons.error,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: color,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
     );
   }
 
@@ -284,40 +477,6 @@ class _HomeViewState extends State<HomeView> {
       } else {
         _showErrorDialog(
             context, attendanceProvider.error ?? 'Chấm công thất bại');
-      }
-    }
-  }
-
-  Future<void> _registerFace() async {
-    final attendanceProvider = context.read<AttendanceProvider>();
-
-    File? faceImage = await _openCamera('register');
-    if (faceImage == null) return;
-
-    final success = await attendanceProvider.registerFace(faceImage);
-
-    if (mounted) {
-      if (success) {
-        final successMessage = attendanceProvider.successMessage;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(
-                  child:
-                      Text(successMessage ?? 'Đăng ký khuôn mặt thành công!'),
-                ),
-              ],
-            ),
-            backgroundColor: AppColors.success,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      } else {
-        _showErrorDialog(
-            context, attendanceProvider.error ?? 'Đăng ký khuôn mặt thất bại');
       }
     }
   }

@@ -389,14 +389,23 @@ class AttendanceController(http.Controller):
             if not face_image:
                 return {'error': 'Không có ảnh khuôn mặt'}
             
-            # Kiểm tra xem nhân viên đã có ảnh khuôn mặt chưa
+            # Kiểm tra xem nhân viên đã có ảnh khuôn mặt active chưa
             existing_face = request.env['hr.employee.face'].sudo().search([
                 ('employee_id', '=', employee.id),
                 ('is_active', '=', True)
             ], limit=1)
             
-            # Nếu đã có ảnh, xóa dữ liệu cũ trên API server trước
+            # Nếu đã có ảnh active, từ chối đăng ký mới
             if existing_face:
+                return {'error': f'Nhân viên {employee.name} đã có ảnh khuôn mặt đang sử dụng. Vui lòng vô hiệu hóa ảnh cũ trước khi đăng ký ảnh mới.'}
+            
+            # Nếu có ảnh inactive, xóa dữ liệu cũ trên API server trước
+            inactive_faces = request.env['hr.employee.face'].sudo().search([
+                ('employee_id', '=', employee.id),
+                ('is_active', '=', False)
+            ])
+            
+            if inactive_faces:
                 _logger.info(f"Deleting existing face data for employee {employee.id} before registering new image")
                 delete_result = self._call_face_delete_api(employee.id)
                 
@@ -446,50 +455,7 @@ class AttendanceController(http.Controller):
         except Exception as e:
             _logger.error(f"Register face error: {str(e)}")
             return {'error': f'Lỗi server: {str(e)}'}
-
-    @http.route('/attendance/delete_face', type='json', auth='user')
-    def delete_face(self, **kw):
-        """Xóa dữ liệu khuôn mặt của nhân viên"""
-        try:
-            if not request.env.user or not request.env.user.id:
-                return {'error': 'Session expired. Vui lòng đăng nhập lại.'}
-            
-            employee = request.env.user.employee_id
-            if not employee:
-                return {'error': 'Không tìm thấy nhân viên'}
-            
-            # Kiểm tra xem nhân viên có dữ liệu khuôn mặt không
-            existing_faces = request.env['hr.employee.face'].sudo().search([
-                ('employee_id', '=', employee.id),
-                ('is_active', '=', True)
-            ])
-            
-            if not existing_faces:
-                return {'error': 'Nhân viên chưa có dữ liệu khuôn mặt để xóa'}
-            
-            # Gọi API để xóa dữ liệu trên face recognition server
-            delete_result = self._call_face_delete_api(employee.id)
-            
-            if not delete_result.get('success'):
-                return {'error': delete_result.get('message', 'Xóa dữ liệu khuôn mặt thất bại')}
-            
-            # Vô hiệu hóa tất cả bản ghi khuôn mặt trong Odoo
-            existing_faces.write({
-                'is_active': False,
-                'notes': f"Xóa dữ liệu khuôn mặt - {fields.Datetime.now()}"
-            })
-            
-            return {
-                'success': True,
-                'message': 'Xóa dữ liệu khuôn mặt thành công!',
-                'deleted_files': delete_result.get('deleted_files', []),
-                'deleted_records': len(existing_faces)
-            }
-            
-        except Exception as e:
-            _logger.error(f"Delete face error: {str(e)}")
-            return {'error': f'Lỗi server: {str(e)}'}
-
+    
     @http.route('/attendance/face_api_health', type='json', auth='user')
     def face_api_health(self, **kw):
         """Kiểm tra trạng thái API face recognition"""

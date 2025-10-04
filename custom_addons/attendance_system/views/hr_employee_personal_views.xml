@@ -10,7 +10,6 @@
                     <group>
                         <group string="Thông tin cơ bản">
                             <field name="employee_id" options="{'no_create': True, 'no_open': False}" readonly="1"/>
-                          
                             <field name="name" readonly="1"/>
                             <field name="job_title" readonly="1"/>
                             <field name="department_id" readonly="1"/>
@@ -57,7 +56,7 @@ else:
               action="hr_employee_personal_current_user_action"
               groups="base.group_user"
               sequence="15"/>
-    
+
     <!-- Action for 3D Face Data -->
     <record id="action_3d_face_data" model="ir.actions.server">
         <field name="name">Dữ liệu khuôn mặt 3D</field>
