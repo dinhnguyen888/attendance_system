@@ -1,6 +1,6 @@
 # Face Attendance System
-<h1> Tài khoản đăng nhập: admin </h1>
-<h1> Mật khẩu: admin </h1>
+<p> Tài khoản đăng nhập: admin </p>
+<p> Mật khẩu: admin </p>
 <div align="center">
   <img src="GitFolder/anh_1.png" alt="Hình ảnh 1" width="400"/>
   <img src="GitFolder/anh_2.png" alt="Hình ảnh 2" width="400"/>
