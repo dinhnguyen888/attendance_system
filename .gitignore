@@ -47,3 +47,61 @@ embedded_linux/build/CMakeFiles/Makefile2
 embedded_linux/build/CMakeFiles/progress.marks
 embedded_linux/build/CMakeFiles/TargetDirectories.txt
 embedded_linux/build/Makefile
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Odoo
+filestore/
+sessions/
+addons/
+.odoo_history
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.sqlite
+
+# Environment variables
+.env
+.env.local

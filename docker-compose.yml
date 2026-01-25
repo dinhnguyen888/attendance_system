@@ -6,7 +6,7 @@ services:
       POSTGRES_DB: odoo
       POSTGRES_USER: odoo
       POSTGRES_PASSWORD: odoo
-      TZ: Asia/Ho_Chi_Minh         # Thêm timezone
+      TZ: Asia/Ho_Chi_Minh # Thêm timezone
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -26,7 +26,7 @@ services:
       - employee_embeddings_data:/app/employee_embeddings
     environment:
       - PYTHONPATH=/app
-      - TZ=Asia/Ho_Chi_Minh        # Thêm timezone
+      - TZ=Asia/Ho_Chi_Minh # Thêm timezone
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - postgres
@@ -49,8 +49,9 @@ services:
       - HOST=postgres
       - USER=odoo
       - PASSWORD=odoo
-      - TZ=Asia/Ho_Chi_Minh        # Thêm timezone
-    command: -- --config=/etc/odoo/odoo.conf
+      - TZ=Asia/Ho_Chi_Minh # Thêm timezone
+
+    command: odoo --config=/etc/odoo/odoo.conf
 
 volumes:
   postgres_data:
