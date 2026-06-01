@@ -1,4 +1,7 @@
 # Face Attendance System
+<img width="1898" height="868" alt="image" src="https://github.com/user-attachments/assets/4d0c63e3-d90d-4db8-953d-a0db8b453a8e" />
+<img width="1911" height="871" alt="image" src="https://github.com/user-attachments/assets/4eafdbcb-d387-42d1-ac5d-bcebebcf2d39" />
+<img width="1909" height="811" alt="image" src="https://github.com/user-attachments/assets/d63c20e0-eb80-4985-b6e9-6bcd75affc56" />
 
 Face Attendance System is an Odoo-based attendance project with face login and employee face registration. Odoo stores employee and attendance data, while a separate Python gRPC service analyzes images and short webcam videos with InsightFace, OpenCV, ONNX Runtime, and YOLO-based anti-spoofing checks.
 
