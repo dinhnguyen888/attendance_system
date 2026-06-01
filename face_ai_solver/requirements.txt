@@ -1,0 +1,14 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+opencv-python-headless==4.8.1.78
+numpy==1.24.3
+insightface==0.7.3
+onnxruntime==1.18.1
+Pillow==10.1.0
+ultralytics>=8.3.0
+torch==2.0.1+cpu
+torchvision==0.15.2+cpu
+grpcio==1.64.1
+protobuf==5.27.2
+av==12.3.0
+python-dotenv==1.0.1

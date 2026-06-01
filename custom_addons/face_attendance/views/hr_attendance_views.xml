@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="hr_attendance_view_form_face_attendance" model="ir.ui.view">
+        <field name="name">hr.attendance.form.face.attendance</field>
+        <field name="model">hr.attendance</field>
+        <field name="inherit_id" ref="hr_attendance.hr_attendance_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='check_in_group']" position="after">
+                <group colspan="2" name="face_attendance_note_group">
+                    <field name="note" string="Note in day" placeholder="Add a note..."/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

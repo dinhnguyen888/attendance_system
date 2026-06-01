@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package resp.face;
+
+service FaceRecognition {
+  rpc RegisterFace(RegisterFaceRequest) returns (RegisterFaceResponse);
+  rpc AnalyzeFace(AnalyzeFaceRequest) returns (AnalyzeFaceResponse);
+}
+
+message FaceBox {
+  int32 x = 1;
+  int32 y = 2;
+  int32 width = 3;
+  int32 height = 4;
+}
+
+message Candidate {
+  int64 user_id = 1;
+  int64 employee_id = 2;
+  repeated float registered_embedding = 3;
+  float threshold = 4;
+}
+
+message CandidateSimilarity {
+  int64 user_id = 1;
+  int64 employee_id = 2;
+  float similarity = 3;
+}
+
+message CandidateMetrics {
+  int64 user_id = 1;
+  int64 employee_id = 2;
+  float threshold = 3;
+  float max_similarity = 4;
+  float avg_similarity = 5;
+  float min_similarity = 6;
+  float similarity_margin = 7;
+}
+
+message FrameMetrics {
+  int32 frame_index = 1;
+  bool valid = 2;
+  int32 face_count = 3;
+  bool spoofing_detected = 4;
+  string error_code = 5;
+  repeated CandidateSimilarity similarity_by_candidate = 6;
+}
+
+message RegisterFaceRequest {
+  int64 employee_id = 1;
+  bytes image_bytes = 2;
+  string image_mime = 3;
+}
+
+message RegisterFaceResponse {
+  string status = 1;
+  string error_code = 2;
+  string message = 3;
+  repeated float embedding = 4;
+  int32 embedding_dim = 5;
+  string model_name = 6;
+  int32 face_count = 7;
+  FaceBox face_box = 8;
+  float blur_score = 9;
+  float brightness_score = 10;
+}
+
+message AnalyzeFaceRequest {
+  bytes video_bytes = 1;
+  string video_mime = 2;
+  int32 max_frames = 3;
+  repeated Candidate candidates = 4;
+}
+
+message AnalyzeFaceResponse {
+  string status = 1;
+  string error_code = 2;
+  string message = 3;
+  int32 processed_frame_count = 4;
+  int32 valid_frame_count = 5;
+  int32 spoofed_frame_count = 6;
+  float spoofing_error_rate = 7;
+  int64 best_candidate_user_id = 8;
+  int64 best_candidate_employee_id = 9;
+  float max_similarity = 10;
+  float avg_similarity = 11;
+  float min_similarity = 12;
+  int32 best_frame_index = 13;
+  repeated CandidateMetrics candidates = 14;
+  repeated FrameMetrics frames = 15;
+}
