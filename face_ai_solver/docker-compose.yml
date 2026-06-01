@@ -1,26 +1,9 @@
 services:
-  postgres:
-    image: postgres:13
-    environment:
-      POSTGRES_DB: odoo_db
-      POSTGRES_USER: odoo
-      POSTGRES_PASSWORD: odoo
-      TZ: Asia/Ho_Chi_Minh
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U odoo -d odoo_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  face_ai_solver:
+  custom_api_service:
     build:
-      context: ./face_ai_solver
+      context: .
       dockerfile: Dockerfile
+    container_name: resp_custom_api_service
     environment:
       GRPC_PORT: ${GRPC_PORT:-50051}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -43,38 +26,6 @@ services:
       PHOTO_ASPECT_RATIO: ${PHOTO_ASPECT_RATIO:-0.75}
       PHOTO_ASPECT_RATIO_TOLERANCE: ${PHOTO_ASPECT_RATIO_TOLERANCE:-0.08}
       PHOTO_BACKGROUND_MIN_COVERAGE: ${PHOTO_BACKGROUND_MIN_COVERAGE:-0.55}
-      TZ: Asia/Ho_Chi_Minh
     ports:
       - "${GRPC_PORT:-50051}:${GRPC_PORT:-50051}"
-    volumes:
-      - face_ai_models:/root/.insightface
     restart: unless-stopped
-
-  odoo:
-    build:
-      context: ./custom_addons
-      dockerfile: Dockerfile
-    depends_on:
-      postgres:
-        condition: service_healthy
-      face_ai_solver:
-        condition: service_started
-    ports:
-      - "8069:8069"
-    volumes:
-      - ./custom_addons:/mnt/extra-addons
-      - ./odoo.conf:/etc/odoo/odoo.conf
-      - odoo_data:/var/lib/odoo
-    environment:
-      HOST: postgres
-      USER: odoo
-      PASSWORD: odoo
-      FACE_AI_GRPC_TARGET: face_ai_solver:${GRPC_PORT:-50051}
-      TZ: Asia/Ho_Chi_Minh
-    command: odoo --config=/etc/odoo/odoo.conf --init=base,face_attendance --without-demo=all
-    restart: unless-stopped
-
-volumes:
-  postgres_data:
-  odoo_data:
-  face_ai_models:

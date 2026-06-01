@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_employee_form_face_attendance" model="ir.ui.view">
+        <field name="name">hr.employee.form.face.attendance</field>
+        <field name="model">hr.employee</field>
+        <field name="inherit_id" ref="hr.view_employee_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='job_title']" position="after">
+                <group col="2" name="face_attendance_group" string="Face Attendance Information">
+                    <field name="is_face_registered" readonly="1"/>
+                    <field name="face_register_status" readonly="1"/>
+                    <field name="face_registered_at" readonly="1"/>
+                    <field name="face_register_message" readonly="1"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <template id="login_face_button" inherit_id="web.login" name="Face Login Button">
+        <xpath expr="//div[contains(@class, 'oe_login_buttons')]/button[@type='submit' and contains(@class, 'btn-primary')]" position="after">
+            <button type="button" class="btn btn-outline-primary o_resp_face_login_btn">
+                Face Login
+            </button>
+        </xpath>
+        <xpath expr="//form" position="after">
+            <div class="o_resp_face_modal d-none" aria-hidden="true">
+                <div class="o_resp_face_panel">
+                    <div class="o_resp_face_header">
+                        <span>Scan face</span>
+                        <button type="button" class="o_resp_face_close" aria-label="Close">&#215;</button>
+                    </div>
+                    <video class="o_resp_face_video" autoplay="autoplay" playsinline="playsinline" muted="muted"/>
+                    <div class="o_resp_face_status">Preparing camera...</div>
+                    <div class="o_resp_face_actions">
+                        <button type="button" class="btn btn-secondary o_resp_face_cancel">Cancel</button>
+                        <button type="button" class="btn btn-primary o_resp_face_retry d-none">Try again</button>
+                    </div>
+                </div>
+            </div>
+        </xpath>
+    </template>
+</odoo>

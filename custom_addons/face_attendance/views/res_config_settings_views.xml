@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_face_attendance" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.face.attendance</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="inside">
+                <app string="Face Attendance" name="face_attendance" logo="/face_attendance/static/description/icon.svg">
+                    <block title="Face Recognition">
+                        <setting string="AI gRPC Target">
+                            <field name="face_ai_grpc_target"/>
+                        </setting>
+                        <setting string="Default Similarity Threshold">
+                            <field name="face_default_threshold"/>
+                        </setting>
+                        <setting string="Minimum Valid Frames">
+                            <field name="face_min_valid_frames"/>
+                        </setting>
+                        <setting string="Maximum Spoofing Error Rate">
+                            <field name="face_max_spoofing_error_rate"/>
+                        </setting>
+                        <setting string="Maximum Video Size (MB)">
+                            <field name="face_max_video_size_mb"/>
+                        </setting>
+                        <setting string="Enable company-specific IP restrictions"
+                                 help="Turn this on to allow face attendance only from the IP addresses or CIDR ranges configured on the current company.">
+                            <field name="face_ip_restriction_enabled"/>
+                        </setting>
+                        <setting string="Allowed WiFi IP list"
+                                 help="Users can perform face attendance only when their client IP matches one of these entries. Use one IP or CIDR range per line, for example 192.168.1.10 or 192.168.1.0/24.">
+                            <field name="face_allowed_ip_list" placeholder="192.168.1.10&#10;192.168.1.0/24" invisible="not face_ip_restriction_enabled"/>
+                        </setting>
+                        <setting string="Blocked WiFi IP list"
+                                 help="Users from these IP addresses or CIDR ranges are always blocked, even when the IP also appears in the allowed list.">
+                            <field name="face_blocked_ip_list" placeholder="10.0.0.5&#10;10.0.2.0/24" invisible="not face_ip_restriction_enabled"/>
+                        </setting>
+                    </block>
+                </app>
+            </xpath>
+        </field>
+    </record>
+</odoo>
