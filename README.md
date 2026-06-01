@@ -46,7 +46,7 @@ Password: admin
 ## Test Environment Credentials
 
 ```text
-URL: http://localhost:8069
+URL: attendance-system.nguyenphucdinh.id.vn
 Database: odoo_db
 Username: admin
 Password: admin
