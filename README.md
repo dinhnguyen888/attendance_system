@@ -82,7 +82,7 @@ localhost:50051
 4. Go to **Employees** and update the employee face image.
 5. Log out of Odoo.
 6. On the login page, click **Face Login**.
-7. After a successful scan, Odoo opens automatically and the Attendance module creates a new check-in record if the employee does not already have an open attendance record for the day.
+7. After a successful scan, Odoo opens automatically and the Attendance module creates a new check-in record if the employee does not already have an open attendance record for the current day.
 
 ## Useful Commands
 

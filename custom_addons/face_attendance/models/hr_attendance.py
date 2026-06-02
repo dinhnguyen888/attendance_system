@@ -6,6 +6,12 @@ class HrAttendance(models.Model):
 
     note = fields.Text()
     in_mode = fields.Selection(
-        selection_add=[("face_scan", "Face Scan")],
-        ondelete={"face_scan": "set default"},
+        selection_add=[
+            ("face_scan", "Face Scan"),
+            ("has_not_checkout", "Has Not Checkout"),
+        ],
+        ondelete={
+            "face_scan": "set default",
+            "has_not_checkout": "set default",
+        },
     )

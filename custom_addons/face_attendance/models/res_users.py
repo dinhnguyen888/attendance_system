@@ -1,3 +1,6 @@
+from datetime import datetime, time, timedelta
+
+import pytz
 from odoo import api, fields, models
 from odoo.http import request
 
@@ -134,9 +137,13 @@ class ResUsers(models.Model):
 
     @api.model
     def _check_in_face_scan_employee(self, employee):
+        today_start, tomorrow_start = self._face_scan_employee_day_bounds(employee)
+        self._close_previous_day_open_face_attendances(employee, today_start)
         open_attendance = self.env["hr.attendance"].sudo().search([
             ("employee_id", "=", employee.id),
             ("check_out", "=", False),
+            ("check_in", ">=", today_start),
+            ("check_in", "<", tomorrow_start),
         ], limit=1)
         if open_attendance:
             return open_attendance
@@ -149,6 +156,29 @@ class ResUsers(models.Model):
             "in_browser": request.httprequest.user_agent.string,
             "note": "Checked in by face scan login.",
         })
+
+    @api.model
+    def _close_previous_day_open_face_attendances(self, employee, today_start):
+        previous_open_attendances = self.env["hr.attendance"].sudo().search([
+            ("employee_id", "=", employee.id),
+            ("check_out", "=", False),
+            ("check_in", "<", today_start),
+        ])
+        previous_open_attendances.write({
+            "check_out": today_start - timedelta(seconds=1),
+            "in_mode": "has_not_checkout",
+            "out_mode": "auto_check_out",
+        })
+
+    @api.model
+    def _face_scan_employee_day_bounds(self, employee):
+        user_tz = pytz.timezone(employee.user_id.tz or self.env.user.tz or "UTC")
+        local_now = fields.Datetime.context_timestamp(employee.user_id, fields.Datetime.now())
+        local_start = user_tz.localize(datetime.combine(local_now.date(), time.min))
+        local_tomorrow = local_start + timedelta(days=1)
+        utc_start = local_start.astimezone(pytz.UTC).replace(tzinfo=None)
+        utc_tomorrow = local_tomorrow.astimezone(pytz.UTC).replace(tzinfo=None)
+        return utc_start, utc_tomorrow
 
     @staticmethod
     def _face_scan_client_ip():
